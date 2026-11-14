@@ -1,8 +1,10 @@
-/** Ribbon icon: the logo's open book and AI sparkle in one colour (Obsidian icons use a 0 0 100 100 box). */
+/** Ribbon icon: the logo's little reading cat on a pile of books, in one colour (Obsidian icons use a 0 0 100 100 box). */
 export const LOGO_ICON_ID = "book-companion-logo";
-export const LOGO_ICON_SVG = `<g fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
-<path d="M50 34 C40 27 26 25 13 28 L13 80 C26 77 40 79 50 86 Z"/>
-<path d="M50 34 C60 27 74 25 87 28 L87 80 C74 77 60 79 50 86 Z"/>
-<path d="M59 52 c2 -5 4 -5 6 0 c2 5 4 5 6 0 c2 -5 4 -5 6 0"/><path d="M59 66 c2 -5 4 -5 6 0 c2 5 4 5 6 0"/>
-</g>
-<path d="M70 4 C72 13 74 15 83 17 C74 19 72 21 70 30 C68 21 66 19 57 17 C66 15 68 13 70 4 Z" fill="currentColor"/>`;
+export const LOGO_ICON_SVG = `<g fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+<path d="M34 40 L34 18 L46 28 M66 40 L66 18 L54 28"/>
+<path d="M34 40 C34 26 66 26 66 40 C66 52 58 58 50 58 C42 58 34 52 34 40 Z"/>
+<path d="M42 41 q3 3 6 0 M52 41 q3 3 6 0"/>
+<rect x="26" y="60" width="48" height="12" rx="3"/>
+<rect x="16" y="72" width="68" height="12" rx="3"/>
+<rect x="22" y="84" width="56" height="10" rx="3"/>
+</g>`;
