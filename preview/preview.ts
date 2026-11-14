@@ -4,8 +4,10 @@ import { BookNotes } from "../src/notes";
 import { ReaderView } from "../src/readerView";
 import { mergeSettings } from "../src/settings";
 import { BookStore } from "../src/store";
+import { DeckStore } from "../src/decks";
 import { MemoryVault, fakeAi, sampleEpub } from "../test/sample";
 import { HandoffNeeded } from "../src/ai";
+import { DecksView, renderStudy } from "../src/decksView";
 
 const g: any = globalThis;
 g.__mockApp = { vault: {}, workspace: {} };
@@ -16,7 +18,7 @@ async function mount(frame: HTMLElement, opts: { phone: boolean; handoff?: boole
 	const store = new BookStore(async () => {});
 	const notes = new BookNotes(vault, () => settings.notes);
 	const host = {
-		settings, store, notes,
+		settings, store, notes, decks: new DeckStore(async () => {}),
 		askAi: async (sys: string, m: any) => {
 			if (opts.handoff) throw new HandoffNeeded("…", "Your Claude subscription works through an app on a computer. On this phone, send the question to your chat app.");
 			return fakeAi(sys, m);
@@ -34,7 +36,39 @@ async function mount(frame: HTMLElement, opts: { phone: boolean; handoff?: boole
 	return view;
 }
 
+/** #flash: the flashcard decks on the desktop and a study session on the phone. */
+async function flash() {
+	const settings = mergeSettings({});
+	const decks = new DeckStore(async () => {});
+	const book = decks.bookDeck("Books/Keeper.epub", "The Keeper of Gull Point");
+	const topic = decks.createDeck("Sailing words");
+	const de = decks.bookDeck("Books/Leuchtturm.epub", "Der Leuchtturm");
+	const add = (deckId: string, word: string, translation: string, meaning: string, context: string, form?: string, language = "English", box = 0) => {
+		const { card } = decks.addCard({ deckId, word, form, translation, meaning, context, example: "", language, bookPath: "Books/Keeper.epub" });
+		card.box = box; card.reps = box;
+		if (box) card.due += 3;
+	};
+	add(book.id, "gale", "шторм", "a very strong wind", "Notwithstanding the gales that battered the headland every November, she climbed the steps.", "gales");
+	add(book.id, "fathom", "збагнути", "to understand something difficult", "Few of them could fathom why anyone would choose such solitude.", undefined, "English", 2);
+	add(book.id, "relish", "насолоджуватися", "to enjoy very much", "…let alone relish it.", undefined, "English", 1);
+	add(topic.id, "squall", "шквал", "a sudden strong wind", "She had learned to tell a passing squall from a storm.", undefined, "English", 0);
+	add(de.id, "der Leuchtturm", "маяк", "ein hoher Turm mit einem Licht für Schiffe", "Der Leuchtturm stand allein am Ende der Landzunge.", "Leuchtturm", "German");
+	add(de.id, "die Sehnsucht", "туга", "ein starkes Verlangen nach etwas", "Eine tiefe Sehnsucht erfüllte sie.", "Sehnsucht", "German");
+	const plugin: any = { decks, settings, notes: {}, openBookPath: () => {} };
+	const dv = new DecksView({} as any, plugin);
+	document.getElementById("desktop")!.appendChild(dv.containerEl);
+	await dv.onOpen();
+	const box = document.createElement("div");
+	box.style.cssText = "padding:16px;width:100%;box-sizing:border-box;background:var(--background-primary)";
+	document.getElementById("phone")!.appendChild(box);
+	const cards = decks.dueCards([book.id]);
+	renderStudy(box, decks, cards, {});
+	(box.querySelector(".bcr-study-buttons button") as HTMLElement).click();
+	document.body.dataset.ready = "1";
+}
+
 async function main() {
+	if (location.hash === "#flash") return flash();
 	const desk = await mount(document.getElementById("desktop")!, { phone: false });
 	const phone = await mount(document.getElementById("phone")!, { phone: true, handoff: true });
 

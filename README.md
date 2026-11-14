@@ -51,8 +51,16 @@ You can also **Study this page** (summary, hard sentences and up to 12 words fro
 
 ### 🎓 Language learning
 - Set your **native language**, the **language you're learning** and your **level** (A1 to C2, or native).
+- **More than one language?** Add each with its own level, for example *English C1* and *German B1*. A book's language is read from the EPUB, or you pick it in the reader's panel, and every explanation, simplification and word list then uses that language's level.
 - Explanations come in simple words of the language you're learning (more practice) or in your native language. You choose.
-- **Save words** from any answer. They're collected per book in a flashcard note (`word :: meaning`, tagged `#flashcards` for the Spaced Repetition plugin), and the **Words** tab has a quiz that moves each word through five boxes.
+
+### 🃏 Flashcards and decks
+- **Card** (on any selected word) makes a flashcard in one tap: the word in its dictionary form (with the article for German nouns), the translation, a short meaning at your level, an example, and **the sentence from the book** with the word marked. The card links back to the exact page.
+- Words from **Simplify** and **Study this page** can be saved as cards too.
+- **Decks**: every book gets its own deck, and you can make **topic decks** (*Sailing words*, *Legal German*…) and move cards between them. Choose where new cards go from the Words tab.
+- **Practise** with a built-in spaced-repetition trainer: see the word in its sentence, show the answer, then *Again*, *Good* or *Easy*. Cards come back after 1, 3, 7, 14 and 30 days. Keys: <kbd>Space</kbd> to reveal, <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> to answer. Works the same on phones.
+- The **Flashcards** view (ribbon icon 🗂) lists decks with how many cards are due, lets you browse, edit, search and delete cards, and add your own.
+- Book decks also keep a flashcard note (`word :: meaning`, tagged `#flashcards`) in the book's folder, and any deck can be **saved as a note** for the Spaced Repetition plugin.
 
 ### 🗂️ A small system around every book
 Each book gets a folder (default `Books/<Title>/`) containing:
@@ -128,7 +136,7 @@ These notes are checked against Typed Graph's own engine: the test vault reads b
 - Open any `.epub`. For PDFs, use the file menu → **Open in Book Reader**, or turn on *Open PDFs in this reader*.
 - Select text and pick an action from the toolbar. Tap a highlight to explain it, add a note, recolour or remove it.
 - Toolbar: contents · previous/next · position · text and layout (EPUB) or zoom and ✏️ write on the page (PDF) · handwritten note · study this page · book page · companion panel.
-- Commands (assign your own hotkeys): explain, simplify or define the selection, highlight, new note, handwritten note, write on page, study this page, toggle panel, book page, show in Typed Graph, add book types to Typed Graph schema, next/previous page, contents, open library.
+- Commands (assign your own hotkeys): explain, simplify or define the selection, make a flashcard, open flashcard decks, study flashcards that are due, highlight, new note, handwritten note, write on page, study this page, toggle panel, book page, show in Typed Graph, add book types to Typed Graph schema, next/previous page, contents, open library.
 
 ## Disclosures
 

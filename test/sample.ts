@@ -67,6 +67,11 @@ export async function fakeAi(_system: string, messages: ChatMessage[]): Promise<
 		const w = /phrase "(.+?)"/.exec(last)?.[1] ?? "word";
 		return `**${w}** — very careful about every small detail (ретельний)\n\n*Adjective.* Here it means Mara did the job slowly and perfectly.\n\nExample: *He keeps meticulous notes.*\n\nEasier words: careful, exact, precise.`;
 	}
+	if (last.startsWith("Make a flashcard")) {
+		const w = /phrase "(.+?)"/.exec(last)?.[1] ?? "word";
+		const lemma = w.toLowerCase().replace(/s$/, "");
+		return `Word: ${lemma}\nTranslation: шторм\nMeaning: a very strong wind\nExample: The gale broke the old fence.`;
+	}
 	if (last.startsWith("Translate")) return "Незважаючи на шторми, що щолистопада били по мисі, вона щовечора підіймалася сто дванадцятьма сходинками…";
 	return `This sentence shows how dedicated Mara is: ${quoted ? `“${quoted.slice(0, 60)}…”` : "the passage"} describes her daily routine. The comparison of the lens to *a second moon* tells us how bright and important the light is to her.`;
 }

@@ -21,6 +21,10 @@ import { buildUserPrompt, parseVocabulary } from "../src/prompts";
 import { ReaderView } from "../src/readerView";
 import { DEFAULT_SETTINGS, mergeSettings } from "../src/settings";
 import { BookStore } from "../src/store";
+import { Card, DeckStore, INTERVALS, dayNumber, deckToMarkdown, sentenceAround } from "../src/decks";
+import { CardModal, DecksView, renderStudy } from "../src/decksView";
+import { languageName, profileFor } from "../src/languages";
+import { buildSystemPrompt, parseCard } from "../src/prompts";
 import { locFromString, locToString } from "../src/types";
 import { MemoryVault, fakeAi, sampleEpub } from "./sample";
 
@@ -35,9 +39,10 @@ async function main() {
 	const settings = mergeSettings({ learner: { level: "B1", nativeLanguage: "Ukrainian", learningLanguage: "English" } });
 	const vault = new MemoryVault();
 	const store = new BookStore(async () => {});
+	const decks = new DeckStore(async () => {});
 	const notes = new BookNotes(vault, () => settings.notes);
 	const host = {
-		settings, store, notes,
+		settings, store, notes, decks,
 		askAi: fakeAi,
 		loadPdf: async () => { throw new Error("no pdf.js here"); },
 		openNote: (_p: string) => {},
@@ -164,6 +169,101 @@ async function main() {
 	const selTool = view.containerEl.querySelectorAll(".bcr-seltool button").length;
 	check("hud", toolbarBtns >= 8 && /%/.test(label) && cards >= 3 && wordRows === 3 && hlRows >= 1 && tabs === 3 && selTool >= 10 && HUB_SECTIONS.every((s) => hub.includes(`## ${s}`)),
 		`toolbar ${toolbarBtns} buttons, position "${label}", selection bar ${selTool} buttons, panel tabs ${tabs}: ${cards} AI answers, ${wordRows} words, ${hlRows} highlights; book page has all ${HUB_SECTIONS.length} sections`);
+
+	// --- flashcards: a card from a selected word, with its sentence and translation
+	const gSel = { text: "dialects", loc: { chapter: 0, frac: 0.1 }, context: text0 };
+	const gCard = await view.makeCard(gSel);
+	const again = await view.makeCard(gSel);
+	const bookDeck = decks.bookDeck(view.meta!.path, view.meta!.title);
+	const inDeck = decks.deckCards(bookDeck.id);
+	const vocabNow = vault.files.get(vocabPath) ?? "";
+	check("flashcard", !!gCard && gCard.word === "dialect" && gCard.form === "dialects" && gCard.translation === "шторм" && !!gCard.example
+		&& (gCard.context ?? "").includes("in a hundred dialects") && !(gCard.context ?? "").includes("Mara had kept") && again?.id === gCard.id
+		&& inDeck.filter((c) => c.word === "dialect").length === 1 && vocabNow.includes("dialect :: шторм — a very strong wind"),
+		`one tap on "dialects" made the card "${gCard?.word}" (${gCard?.translation}) with its sentence "${(gCard?.context ?? "").slice(0, 50)}"; doing it twice made no duplicate; it is also in the book's flashcard note`);
+
+	// --- decks: topic decks next to the book deck
+	const topic = decks.createDeck("Sailing words");
+	const moved = decks.addCard({ deckId: topic.id, word: "fathom", translation: "зрозуміти", language: "English" });
+	decks.moveCard(gCard!.id, topic.id);
+	const dupTopic = decks.createDeck("sailing WORDS");
+	const exportPath = await notes.exportDeck(topic, decks.deckCards(topic.id));
+	const exported = vault.files.get(exportPath) ?? "";
+	check("decks", dupTopic.id === topic.id && decks.deckCards(topic.id).length === 2 && decks.deckCards(bookDeck.id).every((c) => c.id !== gCard!.id) && moved.created
+		&& decks.sortedDecks()[0].kind === "book" && exported.includes("dialect :: шторм — a very strong wind") && exported.includes("#flashcards") && deckToMarkdown(topic, [], "x").includes("deck: \"Sailing words\""),
+		`a book deck and a topic deck "${topic.name}"; a card moved between them; the topic deck saved as a "word :: meaning" note`);
+
+	// --- spaced repetition
+	const t0 = dayNumber();
+	const fresh = decks.dueCards([topic.id]);
+	const c1 = fresh[0];
+	decks.review(c1, "good", t0);
+	const afterGood = { box: c1.box, due: c1.due };
+	decks.review(c1, "easy", t0);
+	const afterEasy = { box: c1.box, due: c1.due };
+	decks.review(c1, "again", t0);
+	const afterAgain = { box: c1.box, due: c1.due, lapses: c1.lapses };
+	check("spaced-repetition", fresh.length === 2 && afterGood.box === 1 && afterGood.due === t0 + INTERVALS[1] && afterEasy.box === 3 && afterEasy.due === t0 + INTERVALS[3]
+		&& afterAgain.box === 0 && afterAgain.due === t0 && afterAgain.lapses === 1 && !decks.dueCards([topic.id], 20, t0 - 1).length && decks.stats([topic.id], t0).due === 2,
+		`good moves a card to the next box (due in ${INTERVALS[1]} day), easy skips ahead (${INTERVALS[3]} days), again brings it back today`);
+
+	// --- the study screen: show the answer, grade it
+	const studyBox = document.createElement("div");
+	document.body.appendChild(studyBox);
+	const session = decks.dueCards([topic.id]);
+	let finished = false;
+	renderStudy(studyBox, decks, session, { onDone: () => { finished = true; } });
+	const front = studyBox.querySelector(".bcr-flash-word")?.textContent ?? "";
+	const hasBackEarly = !!studyBox.querySelector(".bcr-flash-back");
+	(studyBox.querySelector(".bcr-modal-buttons button") as any).click();
+	const gradeBtns = Array.from(studyBox.querySelectorAll(".bcr-study-buttons button")).map((b: any) => b.textContent);
+	const hasBack = !!studyBox.querySelector(".bcr-flash-translation");
+	(studyBox.querySelectorAll(".bcr-study-buttons button")[2] as any).click();
+	(studyBox.querySelector(".bcr-modal-buttons button") as any).click();
+	(studyBox.querySelectorAll(".bcr-study-buttons button")[2] as any).click();
+	const endText = studyBox.textContent ?? "";
+	check("study", !!front && !hasBackEarly && hasBack && gradeBtns.length === 3 && finished === false && endText.includes("2 cards reviewed") && !decks.dueCards([topic.id]).length,
+		`front "${front}" first, then the answer after "Show answer", buttons ${gradeBtns.map((t: string) => t.replace(/\d+ days?|today/, "").trim()).join("/")}; all cards done: "${endText.slice(0, 40)}"`);
+
+	// --- the flashcards screen
+	const plugin: any = { decks, settings, notes, openBookPath: () => {} };
+	const dv = new DecksView(new mock.WorkspaceLeaf(), plugin);
+	document.body.appendChild(dv.containerEl);
+	await dv.onOpen();
+	const deckRows = dv.contentEl.querySelectorAll(".bcr-deck-row").length;
+	const groups = Array.from(dv.contentEl.querySelectorAll(".bcr-deck-group")).map((e: any) => e.textContent);
+	dv.showDeck(topic.id);
+	const cardRows = dv.contentEl.querySelectorAll(".bcr-deck-card").length;
+	const modal = new CardModal(dv.app, decks, { deckId: topic.id, onSave: () => {} });
+	modal.open();
+	const formFields = modal.contentEl.querySelectorAll("input, textarea, select").length;
+	modal.close();
+	check("flashcards-screen", deckRows === 2 && groups.join() === "Books,Topics" && cardRows === 2 && formFields === 6, `${deckRows} decks under ${groups.join(" and ")}; the topic deck lists ${cardRows} cards; the card form has ${formFields} fields`);
+
+	// --- cards saved by version 0.1 move into decks
+	const old = new DeckStore(async () => {});
+	const legacy: any = { "Books/Old.epub": { title: "Old Book", vocab: [{ id: "w-1", word: "tide", definition: "sea rising", context: "the tide", box: 2, created: 1 }] } };
+	const n1 = old.importLegacy(legacy);
+	const n2 = old.importLegacy(legacy);
+	check("upgrade", n1 === 1 && n2 === 0 && old.decks[0].name === "Old Book" && old.cards[0].box === 2 && old.cards[0].due > dayNumber() && legacy["Books/Old.epub"].vocab.length === 0, "words saved by the first version became cards in their book's deck, once");
+
+	// --- one reader, several languages
+	const multi = { ...settings.learner, learningLanguage: "English", level: "C1" as const, otherLanguages: [{ language: "German", level: "B1" as const }] };
+	const de = profileFor(multi, "de-AT");
+	const en = profileFor(multi, "en");
+	const unknown = profileFor(multi, "fr");
+	const prompt = buildSystemPrompt(de, "Der Leuchtturm");
+	const cardPrompt = buildUserPrompt({ action: "card", selection: "Sturm" }, de);
+	view.book!.language = "German";
+	settings.learner.otherLanguages = [{ language: "German", level: "A2" }];
+	const viaView = view.learner();
+	view.book!.language = undefined;
+	settings.learner.otherLanguages = [];
+	const pc = parseCard("**Word:** der Sturm\nTranslation: буря\n- Meaning: strong wind\nExample: Der Sturm kommt.");
+	check("languages", languageName("de-AT") === "German" && languageName("Klingon") === "Klingon" && de.level === "B1" && de.learningLanguage === "German" && en.level === "C1" && unknown.level === "C1" && unknown.learningLanguage === "English"
+		&& prompt.includes("learning German") && prompt.includes("B1 (") && cardPrompt.includes("B1 learner of German") && viaView.level === "A2" && viaView.learningLanguage === "German"
+		&& pc.word === "der Sturm" && pc.translation === "буря" && pc.meaning === "strong wind" && pc.example === "Der Sturm kommt." && sentenceAround("One. The gales came. Three.", "gales") === "The gales came.",
+		"German books use your German level (B1) and English books your English level (C1); the language comes from the EPUB or the reader's picker; flashcard answers are read into word, translation, meaning and example");
 
 	// --- subscriptions: phone hand-off and desktop app commands
 	const sAi = { ...DEFAULT_SETTINGS.ai, provider: "claude-sub" as const };

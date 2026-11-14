@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type BookCompanionPlugin from "./main";
+import { LEVEL_LABELS, type LanguageProfile } from "./languages";
 
 export type Provider = "claude-sub" | "chatgpt-sub" | "gemini-sub" | "chat-app" | "anthropic" | "openai" | "openrouter" | "ollama" | "custom";
 export type Level = "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | "native";
@@ -21,9 +22,16 @@ export interface LearnerSettings {
 	nativeLanguage: string;
 	learningLanguage: string;
 	level: Level;
+	/** More languages, each with its own level (the main one above is the default). */
+	otherLanguages: LanguageProfile[];
 	/** Which language explanations are written in. */
 	explainIn: "native" | "learning";
 	extraInstructions: string;
+}
+
+export interface CardSettings {
+	/** Cards per study session. */
+	sessionSize: number;
 }
 
 export interface NotesSettings {
@@ -56,6 +64,7 @@ export interface InkSettings {
 export interface BookCompanionSettings {
 	ai: AiSettings;
 	learner: LearnerSettings;
+	cards: CardSettings;
 	notes: NotesSettings;
 	reader: ReaderSettings;
 	ink: InkSettings;
@@ -96,8 +105,12 @@ export const DEFAULT_SETTINGS: BookCompanionSettings = {
 		nativeLanguage: "Ukrainian",
 		learningLanguage: "English",
 		level: "B1",
+		otherLanguages: [],
 		explainIn: "learning",
 		extraInstructions: "",
+	},
+	cards: {
+		sessionSize: 20,
 	},
 	notes: {
 		rootFolder: "Books",
@@ -208,16 +221,31 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 			.addText((t) => t.setValue(s.learner.nativeLanguage).onChange(async (v) => { s.learner.nativeLanguage = v.trim(); await save(); }));
 		new Setting(containerEl)
 			.setName("Language I'm learning")
-			.setDesc("Usually the language of the books you read.")
+			.setDesc("Your main language. Books in other languages you add below use their own level.")
 			.addText((t) => t.setValue(s.learner.learningLanguage).onChange(async (v) => { s.learner.learningLanguage = v.trim(); await save(); }));
 		new Setting(containerEl)
 			.setName("My level")
 			.setDesc("A1 beginner … C2 near-native. Simplified text and word lists are written for this level.")
 			.addDropdown((d) => {
-				const levels: Record<string, string> = { A1: "A1 – beginner", A2: "A2 – elementary", B1: "B1 – intermediate", B2: "B2 – upper intermediate", C1: "C1 – advanced", C2: "C2 – proficient", native: "Native speaker" };
-				for (const [k, v] of Object.entries(levels)) d.addOption(k, v);
+				for (const [k, v] of Object.entries(LEVEL_LABELS)) d.addOption(k, v);
 				d.setValue(s.learner.level).onChange(async (v) => { s.learner.level = v as Level; await save(); });
 			});
+		s.learner.otherLanguages ??= [];
+		s.learner.otherLanguages.forEach((p, i) => {
+			new Setting(containerEl)
+				.setName(`Another language${s.learner.otherLanguages.length > 1 ? ` ${i + 1}` : ""}`)
+				.setDesc(i === 0 ? "A book's language is read from the book (EPUB), or you pick it in the reader's panel." : "")
+				.addText((t) => t.setPlaceholder("German").setValue(p.language).onChange(async (v) => { p.language = v.trim(); await save(); }))
+				.addDropdown((d) => {
+					for (const [k, v] of Object.entries(LEVEL_LABELS)) d.addOption(k, v);
+					d.setValue(p.level).onChange(async (v) => { p.level = v as Level; await save(); });
+				})
+				.addButton((b) => b.setButtonText("Remove").onClick(async () => { s.learner.otherLanguages.splice(i, 1); await save(); this.display(); }));
+		});
+		new Setting(containerEl)
+			.setName("Add a language")
+			.setDesc("Learning more than one language? Give each its own level, such as German B1 next to English C1.")
+			.addButton((b) => b.setButtonText("Add language").onClick(async () => { s.learner.otherLanguages.push({ language: "", level: "A2" }); await save(); this.display(); }));
 		new Setting(containerEl)
 			.setName("Explain in")
 			.setDesc("Write explanations in my native language, or in simple words of the language I'm learning (more practice).")
@@ -227,6 +255,12 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 			.setName("Anything else the AI should know")
 			.setDesc("For example: \"I study biology\" or \"keep answers short\".")
 			.addTextArea((t) => t.setValue(s.learner.extraInstructions).onChange(async (v) => { s.learner.extraInstructions = v; await save(); }));
+
+		new Setting(containerEl).setName("Flashcards").setHeading();
+		new Setting(containerEl)
+			.setName("Cards per study session")
+			.setDesc("Words you save from a book become flashcards in that book's deck. Make topic decks in the Flashcards view to group words your own way.")
+			.addSlider((sl) => sl.setLimits(5, 100, 5).setValue(s.cards.sessionSize).setDynamicTooltip().onChange(async (v) => { s.cards.sessionSize = v; await save(); }));
 
 		new Setting(containerEl).setName("Notes in your vault").setHeading();
 		new Setting(containerEl)

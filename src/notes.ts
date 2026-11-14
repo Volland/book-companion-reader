@@ -1,4 +1,5 @@
 import type { NotesSettings } from "./settings";
+import { Card, Deck, deckToMarkdown } from "./decks";
 import { BookMeta, Highlight, Loc, VocabEntry, bookLink, locLabel, locToString } from "./types";
 import { COMPANION_SCHEMA, COMPANION_SCHEMA_NAME, LIBRARY_SCHEMA, LIBRARY_SCHEMA_NAME, TypedState, declaresBook, edgeLine } from "./typed";
 
@@ -315,6 +316,16 @@ export class BookNotes {
 			if (e.context) content += `<!-- ${e.context.replace(/-->/g, "").slice(0, 200)} -->\n`;
 		}
 		await this.host.write(path, content);
+		return path;
+	}
+
+	/** A deck as a note in the Books folder, in the "word :: meaning" format flashcard plugins read. */
+	async exportDeck(deck: Deck, cards: Card[]): Promise<string> {
+		const root = this.settings().rootFolder.replace(/\/+$/, "") || "Books";
+		const folder = `${root}/Flashcards`;
+		await this.host.ensureFolder(folder);
+		const path = `${folder}/${safeName(deck.name, 60)}.md`;
+		await this.host.write(path, deckToMarkdown(deck, cards, this.settings().flashcardTag));
 		return path;
 	}
 

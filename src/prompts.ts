@@ -1,11 +1,12 @@
 import type { LearnerSettings } from "./settings";
 
-export type AiAction = "explain" | "simplify" | "define" | "translate" | "ask" | "study";
+export type AiAction = "explain" | "simplify" | "define" | "card" | "translate" | "ask" | "study";
 
 export const ACTION_LABELS: Record<AiAction, string> = {
 	explain: "Explain",
 	simplify: "Simplify for my level",
 	define: "Word meaning",
+	card: "Flashcard",
 	translate: "Translate",
 	ask: "Question",
 	study: "Study this page",
@@ -78,6 +79,16 @@ export function buildUserPrompt(input: PromptInput, l: LearnerSettings): string 
 				"Then: part of speech, the meaning in this sentence, one simple example sentence, and 2-3 easier synonyms.",
 				ctx(input),
 			].join("\n");
+		case "card":
+			return [
+				`Make a flashcard for the word or phrase "${sel}" as it is used in this passage, for a ${l.level} learner of ${l.learningLanguage}.`,
+				"Reply with exactly these four lines and nothing else:",
+				`Word: the dictionary form (a noun with its article if ${l.learningLanguage} uses articles, a verb in the infinitive, a phrase as it is)`,
+				`Translation: the ${l.nativeLanguage} translation of the word as it is used here`,
+				`Meaning: a short, simple definition in simple ${l.learningLanguage} that fits my level`,
+				`Example: one new, simple example sentence in ${l.learningLanguage}`,
+				ctx(input),
+			].join("\n");
 		case "translate":
 			return `Translate this into ${l.nativeLanguage}. Keep the tone. After the translation add one line with any phrase that does not translate literally.\n\n"""\n${sel}\n"""${ctx(input)}`;
 		case "study":
@@ -117,6 +128,25 @@ export function parseVocabulary(markdown: string): ParsedWord[] {
 		if (!word || !definition || seen.has(key) || word.length > 60) continue;
 		seen.add(key);
 		out.push({ word, definition });
+	}
+	return out;
+}
+
+export interface ParsedCard {
+	word?: string;
+	translation?: string;
+	meaning?: string;
+	example?: string;
+}
+
+/** Read the "Word: / Translation: / Meaning: / Example:" lines of a flashcard answer. */
+export function parseCard(answer: string): ParsedCard {
+	const out: ParsedCard = {};
+	const clean = (v: string) => v.replace(/^[\s*_`"“”]+|[\s*_`"“”]+$/g, "").trim();
+	for (const [field, label] of [["word", "Word"], ["translation", "Translation"], ["meaning", "Meaning"], ["example", "Example"]] as const) {
+		const m = new RegExp(`^[\\s>*_#-]*\\**${label}\\**\\s*:\\**\\s*(.+)$`, "im").exec(answer);
+		const v = m ? clean(m[1]) : "";
+		if (v) out[field] = v;
 	}
 	return out;
 }

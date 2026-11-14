@@ -20,6 +20,7 @@ export function installDomHelpers(win: any) {
 		proto.createDiv = function (o?: Attrs | string) { return this.createEl("div", o); };
 		proto.createSpan = function (o?: Attrs | string) { return this.createEl("span", o); };
 		proto.empty = function () { while (this.firstChild) this.removeChild(this.firstChild); };
+		proto.appendText = function (t: string) { this.appendChild(this.ownerDocument.createTextNode(t)); };
 		proto.setText = function (t: string) { this.textContent = t; };
 		proto.addClass = function (...c: string[]) { this.classList.add(...c); };
 		proto.removeClass = function (...c: string[]) { this.classList.remove(...c); };

@@ -4,11 +4,13 @@ import { EpubBook, parseEpub } from "./epub";
 import { EpubRenderer } from "./epubRenderer";
 import { wrapText, unwrapMarks } from "./highlight";
 import { InkSurface, InkTool } from "./ink";
-import { HandwritingModal, NoteModal, QuizModal, TextPromptModal, TocModal, buildInkToolbar } from "./modals";
+import { Card, Deck, DeckStore, cardAnswer, sentenceAround } from "./decks";
+import { HandwritingModal, NoteModal, TextPromptModal, TocModal, buildInkToolbar } from "./modals";
+import { languageName, languageProfiles, profileFor } from "./languages";
 import type { BookNotes } from "./notes";
 import { PdfRenderer, PageSlot } from "./pdfRenderer";
-import { ACTION_LABELS, AiAction, buildSystemPrompt, buildUserPrompt, parseVocabulary } from "./prompts";
-import type { BookCompanionSettings } from "./settings";
+import { ACTION_LABELS, AiAction, buildSystemPrompt, buildUserPrompt, parseCard, parseVocabulary } from "./prompts";
+import type { BookCompanionSettings, LearnerSettings } from "./settings";
 import { HIGHLIGHT_COLORS } from "./settings";
 import type { BookStore } from "./store";
 import { AiCard, BookData, BookMeta, Loc, formatOf, locFromString, locLabel, locToString, uid } from "./types";
@@ -19,10 +21,14 @@ export const VIEW_TYPE_READER = "book-companion-reader";
 export interface ReaderHost {
 	settings: BookCompanionSettings;
 	store: BookStore;
+	decks: DeckStore;
 	notes: BookNotes;
 	askAi(system: string, messages: ChatMessage[]): Promise<string>;
 	loadPdf(): Promise<any>;
 	openNote(path: string): void;
+	/** Open the flashcard decks (optionally one deck), or a quick study window. */
+	openDecks?(deckId?: string): void;
+	studyDue?(deckIds?: string[], title?: string): void;
 	listBookNotes(meta: BookMeta): { path: string; name: string }[];
 	/** Typed Graph pairing (optional). */
 	typedGraphEnabled?(): boolean;
@@ -58,6 +64,8 @@ export class ReaderView extends FileView {
 	private selToolEl!: HTMLElement;
 	panelEl!: HTMLElement;
 	private panelBody!: HTMLElement;
+	private langEl!: HTMLElement;
+	private deckId: string | null = null;
 	private panelTabs: Record<string, HTMLElement> = {};
 	panelTab: PanelTab = "ai";
 	panelOpen = false;
@@ -464,6 +472,7 @@ export class ReaderView extends FileView {
 		btn("sparkles", "Explain", () => this.withSel((s) => this.runAi("explain", s)), "is-primary");
 		btn("graduation-cap", "Simplify", () => this.withSel((s) => this.runAi("simplify", s)));
 		btn("book-a", "Word", () => this.withSel((s) => this.runAi("define", s)), "bcr-word-btn");
+		btn("layers", "Card", () => this.withSel((s) => this.makeCard(s)), "bcr-word-btn");
 		btn("languages", "Translate", () => this.withSel((s) => this.runAi("translate", s)));
 		btn("message-circle-question", "Ask", () => this.withSel((s) => this.askAbout(s)));
 		const colors = t.createDiv({ cls: "bcr-sel-colors" });
@@ -656,8 +665,18 @@ export class ReaderView extends FileView {
 
 	// ---------- AI ----------
 
+	/** The language this book is read in: the one picked for it, else what the EPUB says. */
+	bookLanguage(): string | undefined {
+		return languageName(this.book?.language) ?? languageName(this.epubBook?.language);
+	}
+
+	/** The learner settings for this book: its language's level when you set one up, else the main language. */
+	learner(): LearnerSettings {
+		return profileFor(this.host.settings.learner, this.bookLanguage());
+	}
+
 	private bookSystem(): string {
-		return buildSystemPrompt(this.host.settings.learner, this.meta?.title, this.meta?.author);
+		return buildSystemPrompt(this.learner(), this.meta?.title, this.meta?.author);
 	}
 
 	async runAi(action: AiAction, sel: Selected, question?: string): Promise<AiCard | null> {
@@ -668,7 +687,7 @@ export class ReaderView extends FileView {
 		this.book.ai.unshift(card);
 		if (this.book.ai.length > 60) this.book.ai.length = 60;
 		this.renderPanel(card.id);
-		const user = buildUserPrompt({ action, selection: sel.text, context: sel.context, question, bookTitle: this.meta?.title, bookAuthor: this.meta?.author }, this.host.settings.learner);
+		const user = buildUserPrompt({ action, selection: sel.text, context: sel.context, question, bookTitle: this.meta?.title, bookAuthor: this.meta?.author }, this.learner());
 		const messages: ChatMessage[] = [{ role: "user", content: user }];
 		try {
 			card.answer = await this.host.askAi(this.bookSystem(), messages);
@@ -728,15 +747,49 @@ export class ReaderView extends FileView {
 		this.renderPanel(card.id);
 	}
 
+	/** The deck new cards go to: the one picked in the Words tab, else this book's own deck. */
+	activeDeck(): Deck {
+		const d = this.host.decks.deck(this.deckId);
+		return d ?? this.host.decks.bookDeck(this.meta!.path, this.meta!.title);
+	}
+
+	private async writeVocabNote(deck: Deck, cards: Card[]) {
+		if (!this.meta || deck.kind !== "book" || !cards.length) return;
+		const entries = cards.map((c) => ({ id: c.id, word: c.word, definition: cardAnswer(c) || "?", context: c.context, loc: c.loc, created: c.created, box: c.box }));
+		try { await this.host.notes.addVocabulary(this.meta, entries); } catch (e) { console.warn(e); }
+	}
+
+	/** Save the words of a Simplify / Study answer as flashcards, each with the passage it came from. */
 	async saveWords(card: AiCard): Promise<number> {
 		if (!this.book || !this.meta) return 0;
-		const words = parseVocabulary(card.answer);
-		const fresh = words.filter((w) => !this.book!.vocab.some((v) => v.word.toLowerCase() === w.word.toLowerCase()));
-		const entries = fresh.map((w) => ({ id: uid("w-"), word: w.word, definition: w.definition, context: card.quote.slice(0, 200), loc: card.loc, created: Date.now(), box: 0 }));
-		this.book.vocab.push(...entries);
-		this.host.store.saveSoon();
-		if (entries.length) await this.host.notes.addVocabulary(this.meta, entries);
-		return entries.length;
+		const deck = this.activeDeck();
+		const language = this.learner().learningLanguage;
+		const fresh: Card[] = [];
+		for (const w of parseVocabulary(card.answer)) {
+			const r = this.host.decks.addCard({ deckId: deck.id, word: w.word, meaning: w.definition, context: sentenceAround(card.quote, w.word) || card.quote.slice(0, 200), bookPath: this.meta.path, loc: card.loc, language });
+			if (r.created) fresh.push(r.card);
+		}
+		await this.writeVocabNote(deck, fresh);
+		return fresh.length;
+	}
+
+	/** One tap: ask the AI for the word's dictionary form, translation, meaning and an example, and save it as a flashcard with the sentence from the book. */
+	async makeCard(sel: Selected): Promise<Card | null> {
+		if (!this.book || !this.meta) return null;
+		if (sel.text.split(/\s+/).length > 6) { new Notice("Select a word or a short phrase for a flashcard."); return null; }
+		const deck = this.activeDeck();
+		const ai = await this.runAi("card", sel);
+		const parsed = ai && !ai.error && ai.answer ? parseCard(ai.answer) : {};
+		const word = (parsed.word ?? sel.text).trim().slice(0, 80);
+		const { card, created } = this.host.decks.addCard({
+			deckId: deck.id, word, form: word.toLowerCase() !== sel.text.toLowerCase() ? sel.text : undefined,
+			translation: parsed.translation, meaning: parsed.meaning, example: parsed.example,
+			context: sentenceAround(sel.context, sel.text), bookPath: this.meta.path, loc: sel.loc, language: this.learner().learningLanguage,
+		});
+		if (created) await this.writeVocabNote(deck, [card]);
+		new Notice(!created ? `"${card.word}" is already in ${deck.name}` : parsed.translation ? `Card added to ${deck.name}` : `Card added to ${deck.name} without a translation. Edit it in Flashcards.`);
+		if (this.panelTab === "words") this.renderPanel();
+		return card;
 	}
 
 	// ---------- companion panel ----------
@@ -756,6 +809,7 @@ export class ReaderView extends FileView {
 		mk("ai", "sparkles", "AI");
 		mk("notes", "sticky-note", "Notes");
 		mk("words", "graduation-cap", "Words");
+		this.langEl = head.createDiv({ cls: "bcr-lang" });
 		const close = head.createEl("button", { cls: "bcr-icon-btn clickable-icon", attr: { "aria-label": "Close panel" } });
 		setIcon(close, "x");
 		close.onclick = () => this.togglePanel(false);
@@ -781,9 +835,28 @@ export class ReaderView extends FileView {
 		for (const [id, b] of Object.entries(this.panelTabs)) b.toggleClass("is-active", id === this.panelTab);
 		const body = this.panelBody;
 		body.empty();
+		this.renderLangPicker();
 		if (this.panelTab === "ai") this.renderAiTab(body, scrollToCard);
 		else if (this.panelTab === "notes") this.renderNotesTab(body);
 		else this.renderWordsTab(body);
+	}
+
+	private renderLangPicker() {
+		const el = this.langEl;
+		if (!el) return;
+		el.empty();
+		const profiles = languageProfiles(this.host.settings.learner);
+		if (profiles.length < 2) { el.hide(); return; }
+		el.show();
+		const cur = this.learner().learningLanguage;
+		const sel = el.createEl("select", { cls: "dropdown", attr: { "aria-label": "Language of this book" } });
+		for (const p of profiles) sel.createEl("option", { text: `${p.language} · ${p.level}`, attr: p.language === cur ? { value: p.language, selected: "" } : { value: p.language } });
+		sel.onchange = () => {
+			if (!this.book) return;
+			this.book.language = sel.value;
+			this.host.store.saveSoon();
+			this.renderPanel();
+		};
 	}
 
 	private renderAiTab(body: HTMLElement, scrollTo?: string) {
@@ -803,7 +876,8 @@ export class ReaderView extends FileView {
 		if (!book.ai.length) {
 			const empty = body.createDiv({ cls: "bcr-empty" });
 			empty.createEl("p", { text: "Select any words or sentences in the book, then tap Explain, Simplify, Word or Translate." });
-			empty.createEl("p", { text: `Answers are written for a ${this.host.settings.learner.level} learner of ${this.host.settings.learner.learningLanguage}. Change this in the plugin settings.` });
+			const l = this.learner();
+			empty.createEl("p", { text: `Answers are written for a ${l.level} learner of ${l.learningLanguage}. Change this in the plugin settings.` });
 			return;
 		}
 		for (const card of book.ai) {
@@ -937,26 +1011,39 @@ export class ReaderView extends FileView {
 	}
 
 	private renderWordsTab(body: HTMLElement) {
-		const book = this.book!;
+		const decks = this.host.decks;
+		const deck = this.activeDeck();
 		const top = body.createDiv({ cls: "bcr-panel-actions" });
 		top.createEl("button", { cls: "mod-cta", text: "Study this page" }).onclick = () => void this.studyPage();
-		top.createEl("button", { text: `Quiz me (${book.vocab.length})` }).onclick = () => new QuizModal(this.app, book.vocab, () => this.host.store.saveSoon()).open();
-		const l = this.host.settings.learner;
+		const st = decks.stats([deck.id]);
+		top.createEl("button", { text: `Practise cards (${st.due})` }).onclick = () => this.host.studyDue?.([deck.id], deck.name);
+
+		const pick = body.createDiv({ cls: "bcr-deck-pick" });
+		pick.createSpan({ text: "Save words to" });
+		const sel = pick.createEl("select", { cls: "dropdown", attr: { "aria-label": "Deck for new flashcards" } });
+		for (const d of decks.sortedDecks()) sel.createEl("option", { text: `${d.kind === "book" ? "📖" : "🏷️"} ${d.name}`, attr: d.id === deck.id ? { value: d.id, selected: "" } : { value: d.id } });
+		sel.onchange = () => { this.deckId = sel.value; this.renderPanel(); };
+		pick.createEl("button", { text: "New deck" }).onclick = () => new TextPromptModal(this.app, "New deck", "A topic, like Sailing words", (name) => { this.deckId = decks.createDeck(name).id; this.renderPanel(); }).open();
+		if (this.host.openDecks) pick.createEl("a", { text: "All decks" }).onclick = () => this.host.openDecks?.(deck.id);
+
+		const l = this.learner();
 		body.createDiv({ cls: "bcr-muted", text: `Level ${l.level} · learning ${l.learningLanguage} · native ${l.nativeLanguage}` });
-		if (!book.vocab.length) {
-			body.createDiv({ cls: "bcr-empty", text: "Select a word and tap Word, or use Simplify, then press \"Save words\". Your words also go to a flashcard note in the book's folder." });
+		const cards = decks.deckCards(deck.id);
+		if (!cards.length) {
+			body.createDiv({ cls: "bcr-empty", text: "Select a word and tap Card: it is saved with the sentence it came from and its translation. Words from Simplify and Study can be saved too. Your book's words also go to a flashcard note in its folder." });
 			return;
 		}
-		for (const w of book.vocab.slice().reverse()) {
+		for (const w of cards.slice().reverse()) {
 			const row = body.createDiv({ cls: "bcr-word-row" });
 			const head = row.createDiv({ cls: "bcr-word-head" });
 			head.createSpan({ cls: "bcr-word", text: w.word });
 			head.createSpan({ cls: "bcr-word-box", text: "●".repeat(w.box) + "○".repeat(Math.max(0, 5 - w.box)), attr: { title: "How well you know it" } });
-			row.createDiv({ cls: "bcr-word-def", text: w.definition });
+			row.createDiv({ cls: "bcr-word-def", text: cardAnswer(w) });
+			if (w.context) row.createDiv({ cls: "bcr-muted bcr-deck-context", text: `“${w.context.slice(0, 120)}${w.context.length > 120 ? "…" : ""}”` });
 			const m = row.createDiv({ cls: "bcr-hl-meta" });
 			if (w.loc) { const a = m.createEl("a", { text: locLabel(w.loc) }); a.onclick = () => this.goto(w.loc); }
 			const del = m.createEl("a", { text: "remove" });
-			del.onclick = () => { book.vocab = book.vocab.filter((x) => x.id !== w.id); this.host.store.saveSoon(); this.renderPanel(); };
+			del.onclick = () => { decks.deleteCard(w.id); this.renderPanel(); };
 		}
 	}
 }

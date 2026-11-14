@@ -1,5 +1,5 @@
 import { App, FuzzySuggestModal, Modal, Notice, setIcon } from "obsidian";
-import { InkStroke, VocabEntry } from "./types";
+import { InkStroke } from "./types";
 import { InkSurface, InkTool, InkToolName, drawPaper, strokesToSvg } from "./ink";
 import type { InkSettings } from "./settings";
 
@@ -83,65 +83,6 @@ export class TocModal extends FuzzySuggestModal<TocEntry> {
 		el.createDiv({ text: item.item.title, attr: { style: `padding-left:${item.item.depth * 14}px` } });
 	}
 	onChooseItem(e: TocEntry) { e.go(); }
-}
-
-/** A tiny flashcard quiz over the book's vocabulary (Leitner boxes). */
-export class QuizModal extends Modal {
-	private queue: VocabEntry[];
-	private idx = 0;
-	private right = 0;
-
-	constructor(app: App, words: VocabEntry[], private onUpdate: () => void) {
-		super(app);
-		this.queue = words.slice().sort((a, b) => a.box - b.box || Math.random() - 0.5).slice(0, 15);
-	}
-
-	onOpen() {
-		this.modalEl.addClass("bcr-modal", "bcr-quiz");
-		this.titleEl.setText("Word quiz");
-		this.show();
-	}
-
-	private show() {
-		const { contentEl } = this;
-		contentEl.empty();
-		if (!this.queue.length) {
-			contentEl.createEl("p", { text: "No words yet. Select a word in the book and choose \"Word meaning\", then save it." });
-			return;
-		}
-		if (this.idx >= this.queue.length) {
-			contentEl.createEl("h3", { text: `Done! ${this.right} of ${this.queue.length} known.` });
-			contentEl.createEl("button", { text: "Close", cls: "mod-cta" }).onclick = () => this.close();
-			return;
-		}
-		const w = this.queue[this.idx];
-		contentEl.createDiv({ cls: "bcr-muted", text: `${this.idx + 1} / ${this.queue.length}` });
-		const card = contentEl.createDiv({ cls: "bcr-flashcard" });
-		card.createDiv({ cls: "bcr-flash-word", text: w.word });
-		if (w.context) card.createDiv({ cls: "bcr-flash-context", text: `“${w.context.slice(0, 160)}”` });
-		const back = card.createDiv({ cls: "bcr-flash-back", text: w.definition });
-		back.hide();
-		const row = contentEl.createDiv({ cls: "bcr-modal-buttons" });
-		const reveal = row.createEl("button", { text: "Show meaning", cls: "mod-cta" });
-		reveal.onclick = () => {
-			back.show();
-			reveal.remove();
-			const again = row.createEl("button", { text: "Again" });
-			const knew = row.createEl("button", { text: "I knew it", cls: "mod-cta" });
-			again.onclick = () => { w.box = 0; this.next(); };
-			knew.onclick = () => { w.box = Math.min(5, w.box + 1); this.right++; this.next(); };
-		};
-	}
-
-	private next() {
-		this.idx++;
-		this.onUpdate();
-		this.show();
-	}
-
-	onClose() {
-		this.contentEl.empty();
-	}
 }
 
 /** Build the pen / highlighter / eraser / colour / undo bar used by both handwriting modes. */

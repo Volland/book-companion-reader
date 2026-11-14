@@ -55,6 +55,8 @@ export interface BookData {
 	title?: string;
 	author?: string;
 	loc?: Loc;
+	/** The language this book is read in, when picked by hand (otherwise taken from the EPUB). */
+	language?: string;
 	progress?: number;
 	lastOpened?: number;
 	highlights: Highlight[];

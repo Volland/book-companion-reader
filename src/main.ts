@@ -4,6 +4,8 @@ import { DEFAULT_SCHEMA_FOLDER, TYPED_GRAPH_GRAPH_COMMAND, TYPED_GRAPH_ID, Typed
 import { AiClient, ChatMessage, HandoffNeeded } from "./ai";
 import { desktopCliAvailable, runCli } from "./cliRunner";
 import { svgToStrokes } from "./ink";
+import { DeckStore } from "./decks";
+import { DecksView, StudyModal, VIEW_TYPE_DECKS } from "./decksView";
 import { LibraryView, VIEW_TYPE_LIBRARY } from "./libraryView";
 import { HandwritingModal } from "./modals";
 import { BookNotes, NotesHost } from "./notes";
@@ -15,6 +17,7 @@ import { BookMeta, Loc, formatOf, locFromString } from "./types";
 export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 	settings!: BookCompanionSettings;
 	store!: BookStore;
+	decks!: DeckStore;
 	notes!: BookNotes;
 	ai!: AiClient;
 	private pdfOverridden = false;
@@ -24,6 +27,9 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 		this.settings = mergeSettings(raw.settings);
 		this.store = new BookStore(() => this.persist());
 		this.store.load(raw.books);
+		this.decks = new DeckStore(() => this.persist());
+		this.decks.load(raw.decks);
+		if (this.decks.importLegacy(this.store.books)) this.store.saveSoon();
 		this.notes = new BookNotes(this.vaultHost(), () => this.settings.notes, () => this.typedState());
 		addIcon(LOGO_ICON_ID, LOGO_ICON_SVG);
 		this.ai = new AiClient(() => this.settings.ai, async (req) => {
@@ -39,6 +45,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 			return v;
 		});
 		this.registerView(VIEW_TYPE_LIBRARY, (leaf) => new LibraryView(leaf, this));
+		this.registerView(VIEW_TYPE_DECKS, (leaf) => new DecksView(leaf, this));
 		try {
 			this.registerExtensions(["epub"], VIEW_TYPE_READER);
 		} catch (e) {
@@ -47,6 +54,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 
 		this.addSettingTab(new BookCompanionSettingTab(this.app, this));
 		this.addRibbonIcon(LOGO_ICON_ID, "Book library", () => void this.openLibrary());
+		this.addRibbonIcon("layers", "Flashcards", () => void this.openDecks());
 
 		this.registerObsidianProtocolHandler("book-reader", (params) => {
 			const f = this.app.vault.getAbstractFileByPath(decodeURIComponent(params.file ?? ""));
@@ -65,7 +73,10 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 		}));
 
 		this.registerEvent(this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => {
-			if (file instanceof TFile && formatOf(file.extension)) this.store.rename(oldPath, file.path);
+			if (file instanceof TFile && formatOf(file.extension)) {
+				this.store.rename(oldPath, file.path);
+				this.decks.renameBook(oldPath, file.path);
+			}
 		}));
 
 		this.addCommands();
@@ -74,13 +85,14 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 
 	async onunload() {
 		await this.store.flush();
+		await this.decks.flush();
 		this.restorePdf();
 	}
 
 	// ---------- data ----------
 
 	async persist() {
-		await this.saveData({ settings: this.settings, books: this.store.books });
+		await this.saveData({ settings: this.settings, books: this.store.books, decks: this.decks.toJSON() });
 	}
 
 	async saveSettings() {
@@ -190,6 +202,30 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 		await leaf.setViewState({ type: VIEW_TYPE_READER, state: { file: file.path, loc: loc ? (loc.page ? `p${loc.page}` : `c${loc.chapter}@${loc.frac ?? 0}`) : undefined }, active: true });
 	}
 
+	async openBookPath(path: string, loc?: Loc) {
+		const f = this.app.vault.getAbstractFileByPath(path);
+		if (f instanceof TFile) await this.openBook(f, loc);
+		else new Notice("That book isn't in this vault any more.");
+	}
+
+	async openDecks(deckId?: string) {
+		let leaf: WorkspaceLeaf | undefined = this.app.workspace.getLeavesOfType(VIEW_TYPE_DECKS)[0];
+		if (!leaf) {
+			leaf = Platform.isMobile ? this.app.workspace.getLeaf("tab") : this.app.workspace.getLeaf("split", "vertical");
+			await leaf.setViewState({ type: VIEW_TYPE_DECKS, active: true });
+		}
+		this.app.workspace.revealLeaf(leaf);
+		const v = leaf.view;
+		if (deckId && v instanceof DecksView) v.showDeck(deckId);
+	}
+
+	/** A quick study session over everything due, in a window over whatever you're doing. */
+	studyDue(deckIds?: string[], title = "Flashcards") {
+		const cards = this.decks.dueCards(deckIds, this.settings.cards.sessionSize);
+		if (!cards.length) { new Notice("No flashcards are due. Add words while you read."); return; }
+		new StudyModal(this.app, this.decks, cards, title, { openBook: (c) => c.bookPath && void this.openBookPath(c.bookPath, c.loc) }).open();
+	}
+
 	async openHubFor(file: TFile) {
 		const format = formatOf(file.extension);
 		if (!format) return;
@@ -266,6 +302,8 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 
 	private addCommands() {
 		this.addCommand({ id: "open-library", name: "Open book library", callback: () => void this.openLibrary() });
+		this.addCommand({ id: "open-flashcards", name: "Open flashcard decks", callback: () => void this.openDecks() });
+		this.addCommand({ id: "study-flashcards", name: "Study flashcards that are due", callback: () => this.studyDue() });
 		this.addCommand({
 			id: "open-in-reader", name: "Open current PDF or EPUB in Book Reader",
 			checkCallback: (checking) => {
@@ -287,6 +325,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 		readerCmd("explain-selection", "Explain selected text", (v) => { const s = v.getSelected(); if (s) void v.runAi("explain", s); else new Notice("Select some text first."); });
 		readerCmd("simplify-selection", "Simplify selected text for my level", (v) => { const s = v.getSelected(); if (s) void v.runAi("simplify", s); else new Notice("Select some text first."); });
 		readerCmd("define-selection", "Explain selected word", (v) => { const s = v.getSelected(); if (s) void v.runAi("define", s); else new Notice("Select a word first."); });
+		readerCmd("flashcard-selection", "Make a flashcard from selected word", (v) => { const s = v.getSelected(); if (s) void v.makeCard(s); else new Notice("Select a word first."); });
 		readerCmd("highlight-selection", "Highlight selected text", (v) => { const s = v.getSelected(); if (s) void v.addHighlight(s); });
 		readerCmd("note-selection", "New note about selection or this page", (v) => v.writeNote(v.getSelected() ?? undefined));
 		readerCmd("handwritten-note", "New handwritten note", (v) => v.handwritingNote(v.getSelected() ?? undefined));
