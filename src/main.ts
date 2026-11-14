@@ -43,7 +43,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 		addIcon(LOGO_ICON_ID, LOGO_ICON_SVG);
 		this.ai = new AiClient(() => this.settings.ai, async (req) => {
 			const r = await requestUrl({ url: req.url, method: req.method, headers: req.headers, body: req.body, throw: false });
-			let json: ApiJson | null = null;
+			let json: ApiJson | null;
 			try { json = r.json as ApiJson; } catch { json = null; }
 			return { status: r.status, json, text: r.text };
 		}, runCli, () => Platform.isDesktopApp && desktopCliAvailable());
@@ -333,6 +333,8 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 		readerCmd("explain-selection", "Explain selected text", (v) => { const s = v.getSelected(); if (s) void v.runAi("explain", s); else new Notice("Select some text first."); });
 		readerCmd("simplify-selection", "Simplify selected text for my level", (v) => { const s = v.getSelected(); if (s) void v.runAi("simplify", s); else new Notice("Select some text first."); });
 		readerCmd("define-selection", "Explain selected word", (v) => { const s = v.getSelected(); if (s) void v.runAi("define", s); else new Notice("Select a word first."); });
+		readerCmd("chat-with-cat", "Chat with the cat about this book", (v) => v.openPanel("cat"));
+		readerCmd("discuss-selection", "Discuss selected text with the cat", (v) => { const s = v.getSelected(); if (s) v.discuss(s); else new Notice("Select some text first."); });
 		readerCmd("flashcard-selection", "Make a flashcard from selected word", (v) => { const s = v.getSelected(); if (s) void v.makeCard(s); else new Notice("Select a word first."); });
 		readerCmd("highlight-selection", "Highlight selected text", (v) => { const s = v.getSelected(); if (s) void v.addHighlight(s); });
 		readerCmd("note-selection", "New note about selection or this page", (v) => v.writeNote(v.getSelected() ?? undefined));

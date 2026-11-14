@@ -147,7 +147,6 @@ export class InkSurface {
 	setEnabled(on: boolean) {
 		this.enabled = on;
 		this.canvas.toggleClass?.("is-drawing", on);
-		this.canvas.setCssProps({ "pointer-events": on ? "auto" : "none", "touch-action": on ? "none" : "auto" });
 	}
 
 	isEnabled() {

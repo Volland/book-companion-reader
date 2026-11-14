@@ -80,7 +80,7 @@ export class TocModal extends FuzzySuggestModal<TocEntry> {
 	getItems() { return this.entries; }
 	getItemText(e: TocEntry) { return e.title; }
 	renderSuggestion(item: FuzzyMatch<TocEntry>, el: HTMLElement) {
-		el.createDiv({ text: item.item.title }).setCssProps({ "padding-left": `${item.item.depth * 14}px` });
+		el.createDiv({ cls: "bcr-toc-item", text: item.item.title }).setCssProps({ "--bcr-indent": `${item.item.depth * 14}px` });
 	}
 	onChooseItem(e: TocEntry) { e.go(); }
 }

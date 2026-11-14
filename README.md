@@ -54,6 +54,15 @@ You can also **Study this page** (summary, hard sentences and up to 12 words fro
 - **More than one language?** Add each with its own level, for example *English C1* and *German B1*. A book's language is read from the EPUB, or you pick it in the reader's panel, and every explanation, simplification and word list then uses that language's level.
 - Explanations come in simple words of the language you're learning (more practice) or in your native language. You choose.
 
+### 🐱 Chat with the cat
+Open the **Cat** tab in the reader panel and talk about the book with the little reading cat, like a book-club friend who is reading along.
+- Ask anything: *What is happening on this page? Summarise what I've read so far. Quiz me on this chapter. What does the author mean here?*
+- Select a passage and tap **Cat** to point it at that passage. The passage goes with your next message.
+- The cat sees the page you're on and the whole conversation so far, answers at your language level, and doesn't spoil what comes later.
+- Want to practise? Ask the cat to chat with you in the language you're learning; it will gently correct mistakes.
+- **Every discussion is kept as a note** in the book's `Chats/` folder, linked from the book page under *Discussions*, with your questions and the cat's answers as callouts and links back to the page. The transcript is updated as you talk, and anything you write below it is kept. Pick an earlier discussion from the list to continue it.
+- On a phone, when your subscription can't be reached, the question goes to your chat app and you paste the answer back, as with the other AI features.
+
 ### 🃏 Flashcards and decks
 - **Card** (on any selected word) makes a flashcard in one tap: the word in its dictionary form (with the article for German nouns), the translation, a short meaning at your level, an example, and **the sentence from the book** with the word marked. The card links back to the exact page.
 - Words from **Simplify** and **Study this page** can be saved as cards too.
@@ -64,7 +73,8 @@ You can also **Study this page** (summary, hard sentences and up to 12 words fro
 
 ### 🗂️ A small system around every book
 Each book gets a folder (default `Books/<Title>/`) containing:
-- a **book page** with title, author, status, progress, start and last-read dates, and sections for *Highlights, Notes, Handwriting, Vocabulary, AI explanations*
+- a **book page** with title, author, status, progress, start and last-read dates, and sections for *Highlights, Notes, Handwriting, Vocabulary, AI explanations, Discussions*
+- `Chats/`: your discussions with the cat, one note each
 - `Notes/`: one note per thought, with the quote and a link back to the exact spot
 - `Handwriting/`: your handwritten pages as SVG
 - `Vocabulary – <Title>.md`: your flashcards
@@ -136,7 +146,7 @@ These notes are checked against Typed Graph's own engine: the test vault reads b
 - Open any `.epub`. For PDFs, use the file menu → **Open in Book Reader**, or turn on *Open PDFs in this reader*.
 - Select text and pick an action from the toolbar. Tap a highlight to explain it, add a note, recolour or remove it.
 - Toolbar: contents · previous/next · position · text and layout (EPUB) or zoom and ✏️ write on the page (PDF) · handwritten note · study this page · book page · companion panel.
-- Commands (assign your own hotkeys): explain, simplify or define the selection, make a flashcard, open flashcard decks, study flashcards that are due, highlight, new note, handwritten note, write on page, study this page, toggle panel, book page, show in Typed Graph, add book types to Typed Graph schema, next/previous page, contents, open library.
+- Commands (assign your own hotkeys): explain, simplify or define the selection, chat with the cat, discuss the selection with the cat, make a flashcard, open flashcard decks, study flashcards that are due, highlight, new note, handwritten note, write on page, study this page, toggle panel, book page, show in Typed Graph, add book types to Typed Graph schema, next/previous page, contents, open library.
 
 ## Disclosures
 

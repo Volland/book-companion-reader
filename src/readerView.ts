@@ -9,11 +9,11 @@ import { HandwritingModal, NoteModal, TextPromptModal, TocModal, buildInkToolbar
 import { languageName, languageProfiles, profileFor } from "./languages";
 import type { BookNotes } from "./notes";
 import { PdfRenderer, PageSlot, PdfJs } from "./pdfRenderer";
-import { ACTION_LABELS, AiAction, buildSystemPrompt, buildUserPrompt, parseCard, parseVocabulary } from "./prompts";
+import { ACTION_LABELS, AiAction, CAT_STARTERS, buildCatSystemPrompt, buildCatTurn, buildSystemPrompt, buildUserPrompt, parseCard, parseVocabulary } from "./prompts";
 import type { BookCompanionSettings, LearnerSettings } from "./settings";
 import { HIGHLIGHT_COLORS } from "./settings";
 import type { BookStore } from "./store";
-import { AiCard, BookData, BookMeta, Loc, formatOf, locFromString, locLabel, locToString, uid } from "./types";
+import { AiCard, BookData, BookMeta, ChatMsg, ChatSession, Loc, formatOf, locFromString, locLabel, locToString, uid } from "./types";
 
 export const VIEW_TYPE_READER = "book-companion-reader";
 
@@ -41,7 +41,7 @@ interface Selected {
 	context: string;
 }
 
-type PanelTab = "ai" | "notes" | "words";
+type PanelTab = "ai" | "cat" | "notes" | "words";
 
 export class ReaderView extends FileView {
 	allowNoFile = false;
@@ -66,6 +66,10 @@ export class ReaderView extends FileView {
 	private panelBody!: HTMLElement;
 	private langEl!: HTMLElement;
 	private deckId: string | null = null;
+	private chatId: string | null = null;
+	private chatQuote: Selected | null = null;
+	private chatDraft = "";
+	private chatBusy = false;
 	private panelTabs: Record<string, HTMLElement> = {};
 	panelTab: PanelTab = "ai";
 	panelOpen = false;
@@ -470,6 +474,7 @@ export class ReaderView extends FileView {
 		};
 		btn("sparkles", "Explain", () => this.withSel((s) => this.runAi("explain", s)), "is-primary");
 		btn("graduation-cap", "Simplify", () => this.withSel((s) => this.runAi("simplify", s)));
+		btn("cat", "Cat", () => this.withSel((s) => this.discuss(s)));
 		btn("book-a", "Word", () => this.withSel((s) => this.runAi("define", s)), "bcr-word-btn");
 		btn("layers", "Card", () => this.withSel((s) => this.makeCard(s)), "bcr-word-btn");
 		btn("languages", "Translate", () => this.withSel((s) => this.runAi("translate", s)));
@@ -805,6 +810,7 @@ export class ReaderView extends FileView {
 			this.panelTabs[id] = b;
 		};
 		mk("ai", "sparkles", "AI");
+		mk("cat", "cat", "Cat");
 		mk("notes", "sticky-note", "Notes");
 		mk("words", "graduation-cap", "Words");
 		this.langEl = head.createDiv({ cls: "bcr-lang" });
@@ -835,6 +841,7 @@ export class ReaderView extends FileView {
 		body.empty();
 		this.renderLangPicker();
 		if (this.panelTab === "ai") this.renderAiTab(body, scrollToCard);
+		else if (this.panelTab === "cat") this.renderCatTab(body);
 		else if (this.panelTab === "notes") this.renderNotesTab(body);
 		else this.renderWordsTab(body);
 	}
@@ -927,7 +934,7 @@ export class ReaderView extends FileView {
 	}
 
 	/** The question goes to the person's own ChatGPT / Claude / Gemini app; they paste the answer back. */
-	private renderHandoff(el: HTMLElement, card: AiCard) {
+	private renderHandoff(el: HTMLElement, card: { id: string; answer: string; handoff?: string; handoffReason?: string }, onAnswer?: (text: string) => void) {
 		const box = el.createDiv({ cls: "bcr-handoff" });
 		box.createDiv({ cls: "bcr-muted", text: card.handoffReason ?? "Answer in your chat app" });
 		const row = box.createDiv({ cls: "bcr-card-actions" });
@@ -949,10 +956,11 @@ export class ReaderView extends FileView {
 		setIcon(paste.createSpan(), "clipboard-paste");
 		paste.createSpan({ text: "Paste answer" });
 		paste.onclick = async () => {
-			let text = "";
+			let text: string;
 			try { text = (await navigator.clipboard?.readText()) ?? ""; } catch { text = ""; }
 			const accept = (t: string) => {
 				if (!t.trim() || t.trim() === card.handoff?.trim()) return;
+				if (onAnswer) { onAnswer(t.trim()); return; }
 				card.answer = (card.answer ? card.answer + "\n\n---\n" : "") + t.trim();
 				card.handoff = undefined;
 				card.handoffReason = undefined;
@@ -962,6 +970,146 @@ export class ReaderView extends FileView {
 			if (text.trim() && text.trim() !== card.handoff?.trim()) accept(text);
 			else new TextPromptModal(this.app, "Paste the answer", "Paste the chat app's answer here…", accept, true).open();
 		};
+	}
+
+	// ---------- chat with the cat ----------
+
+	private catSystem(): string {
+		return buildCatSystemPrompt(this.learner(), this.meta?.title, this.meta?.author);
+	}
+
+	/** The discussion on screen, if one is open. */
+	chatSession(): ChatSession | null {
+		return this.book?.chats.find((c) => c.id === this.chatId) ?? null;
+	}
+
+	newChat() {
+		this.chatId = null;
+		this.chatDraft = "";
+		if (this.panelTab === "cat") this.renderPanel();
+	}
+
+	/** Point the cat at a passage: it shows above the message box and goes with the next question. */
+	discuss(sel: Selected) {
+		this.clearSelection();
+		this.chatQuote = sel;
+		this.openPanel("cat");
+	}
+
+	/** Say something to the cat. The answer comes back into the thread, and the whole talk is kept as a note in the book's folder. */
+	async chatSend(text: string, quote?: Selected | null): Promise<ChatMsg | null> {
+		const book = this.book;
+		if (!book || !this.meta || this.chatBusy) return null;
+		text = text.trim();
+		if (!text) return null;
+		const q = quote === undefined ? this.chatQuote : quote;
+		this.chatQuote = null;
+		this.chatDraft = "";
+		let session = this.chatSession();
+		if (!session) {
+			const title = text.replace(/\s+/g, " ").split(" ").slice(0, 7).join(" ");
+			session = { id: uid("chat-"), title: title.length > 60 ? title.slice(0, 60) + "…" : title, created: Date.now(), updated: Date.now(), messages: [], language: this.learner().learningLanguage };
+			book.chats.unshift(session);
+			if (book.chats.length > 40) book.chats.length = 40;
+			this.chatId = session.id;
+		}
+		const history: ChatMessage[] = session.messages
+			.filter((m) => m.text.trim() && !m.error && !m.handoff)
+			.slice(-16)
+			.map((m) => ({ role: m.role === "user" ? "user" as const : "assistant" as const, content: m.text }));
+		const loc = this.currentLoc() ?? undefined;
+		session.messages.push({ id: uid("m-"), role: "user", text, created: Date.now(), loc, quote: q?.text });
+		const reply: ChatMsg = { id: uid("m-"), role: "cat", text: "", created: Date.now() };
+		session.messages.push(reply);
+		this.chatBusy = true;
+		this.openPanel("cat");
+		const page = (await this.pageText().catch(() => "")).trim();
+		try {
+			reply.text = await this.host.askAi(this.catSystem(), [...history, { role: "user", content: buildCatTurn(text, { page, quote: q?.text }) }]);
+		} catch (e) {
+			if (e instanceof HandoffNeeded) { reply.handoff = e.prompt; reply.handoffReason = e.reason; }
+			else { reply.text = e instanceof Error ? e.message : String(e); reply.error = true; }
+		}
+		this.chatBusy = false;
+		session.updated = Date.now();
+		this.host.store.saveSoon();
+		if (this.panelTab === "cat") this.renderPanel();
+		if (reply.text && !reply.error) await this.saveChatNote(session);
+		return reply;
+	}
+
+	private async saveChatNote(session: ChatSession) {
+		if (!this.meta) return;
+		try {
+			session.notePath = await this.host.notes.saveChat(this.meta, session);
+			this.host.store.saveSoon();
+			if (this.panelTab === "cat") this.renderPanel();
+		} catch (e) { console.warn(e); }
+	}
+
+	private renderCatTab(body: HTMLElement) {
+		const book = this.book!;
+		const session = this.chatSession();
+		const wrap = body.createDiv({ cls: "bcr-chat" });
+
+		const bar = wrap.createDiv({ cls: "bcr-chat-bar" });
+		const sel = bar.createEl("select", { cls: "dropdown", attr: { "aria-label": "Discussions" } });
+		sel.createEl("option", { text: "💬 New chat", attr: session ? { value: "" } : { value: "", selected: "" } });
+		for (const c of book.chats) sel.createEl("option", { text: c.title, attr: c.id === session?.id ? { value: c.id, selected: "" } : { value: c.id } });
+		sel.onchange = () => { this.chatId = sel.value || null; this.chatDraft = ""; this.renderPanel(); };
+		if (session?.notePath) {
+			const open = bar.createEl("button", { cls: "bcr-chip", attr: { "aria-label": "Open this discussion as a note" } });
+			setIcon(open.createSpan(), "file-text");
+			open.createSpan({ text: "Note" });
+			open.onclick = () => this.host.openNote(session.notePath!);
+		}
+
+		const log = wrap.createDiv({ cls: "bcr-chat-log" });
+		if (!session || !session.messages.length) {
+			const intro = log.createDiv({ cls: "bcr-chat-msg is-cat" });
+			intro.createSpan({ cls: "bcr-chat-who", text: "🐱" });
+			intro.createDiv({ cls: "bcr-chat-text", text: `Mrrp! I'm reading along. Ask me anything about ${this.meta?.title ?? "the book"}, or pick a passage and tap Cat. Our talk is saved as a note in the book's folder.` });
+			const starters = log.createDiv({ cls: "bcr-chat-starters" });
+			for (const s of CAT_STARTERS) starters.createEl("button", { cls: "bcr-chip", text: s }).onclick = () => void this.chatSend(s);
+		} else {
+			for (const m of session.messages) {
+				const el = log.createDiv({ cls: `bcr-chat-msg ${m.role === "user" ? "is-user" : "is-cat"}${m.error ? " is-error" : ""}` });
+				el.dataset.id = m.id;
+				if (m.role === "cat") el.createSpan({ cls: "bcr-chat-who", text: "🐱" });
+				const bubble = el.createDiv({ cls: "bcr-chat-text markdown-rendered" });
+				if (m.quote) bubble.createDiv({ cls: "bcr-chat-quoted", text: m.quote.length > 220 ? m.quote.slice(0, 220) + "…" : m.quote });
+				if (m.role === "cat" && !m.text && !m.handoff) { bubble.createDiv({ cls: "bcr-thinking", text: "Purring over it…" }); continue; }
+				if (m.handoff) {
+					this.renderHandoff(bubble, { id: m.id, answer: m.text, handoff: m.handoff, handoffReason: m.handoffReason }, (t) => {
+						m.text = t; m.handoff = undefined; m.handoffReason = undefined;
+						if (session) { session.updated = Date.now(); void this.saveChatNote(session); }
+						this.host.store.saveSoon();
+						this.renderPanel();
+					});
+					continue;
+				}
+				if (m.role === "cat" && !m.error) void MarkdownRenderer.render(this.app, m.text, bubble, this.file?.path ?? "", this);
+				else bubble.createDiv({ text: m.text });
+			}
+		}
+
+		const input = wrap.createDiv({ cls: "bcr-chat-input" });
+		if (this.chatQuote) {
+			const chip = input.createDiv({ cls: "bcr-chat-quote" });
+			chip.createSpan({ text: `“${this.chatQuote.text.slice(0, 140)}${this.chatQuote.text.length > 140 ? "…" : ""}”` });
+			const x = chip.createEl("button", { cls: "bcr-icon-btn clickable-icon", attr: { "aria-label": "Remove the passage" } });
+			setIcon(x, "x");
+			x.onclick = () => { this.chatQuote = null; this.renderPanel(); };
+		}
+		const row = input.createDiv({ cls: "bcr-ask" });
+		const ta = row.createEl("textarea", { cls: "bcr-ask-input", attr: { rows: "2", placeholder: this.chatQuote ? "What would you like to say about this passage?" : "Talk to the cat about the book…" } });
+		ta.value = this.chatDraft;
+		ta.addEventListener("input", () => { this.chatDraft = ta.value; });
+		const send = row.createEl("button", { cls: "mod-cta", text: this.chatBusy ? "…" : "Send" });
+		const go = () => void this.chatSend(ta.value);
+		send.onclick = go;
+		ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go(); } });
+		window.setTimeout(() => { body.scrollTop = body.scrollHeight; }, 0);
 	}
 
 	private renderNotesTab(body: HTMLElement) {

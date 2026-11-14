@@ -49,7 +49,12 @@ export function sampleEpub(): Uint8Array {
 }
 
 /** Answers shaped like a real model's, so every button has something to work with. */
-export async function fakeAi(_system: string, messages: ChatMessage[]): Promise<string> {
+export async function fakeAi(system: string, messages: ChatMessage[]): Promise<string> {
+	if (system.includes("reading cat")) {
+		const turns = messages.filter((m) => m.role === "user").length;
+		const asked = messages[messages.length - 1].content.split("\n\n").pop() ?? "";
+		return `Mrrp! (turn ${turns}) You asked: ${asked}. Mara guards the light, and **that** is what the page is about.`;
+	}
 	const last = messages[messages.length - 1].content;
 	const quoted = /"""\n([\s\S]*?)\n"""/.exec(last)?.[1]?.trim() ?? "";
 	if (last.startsWith("Help me understand this passage") || last.includes("## Hard sentences") && last.startsWith("Here is a page")) {

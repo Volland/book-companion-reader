@@ -24,7 +24,7 @@ import { BookStore } from "../src/store";
 import { Card, DeckStore, INTERVALS, dayNumber, deckToMarkdown, sentenceAround } from "../src/decks";
 import { CardModal, DecksView, renderStudy } from "../src/decksView";
 import { languageName, profileFor } from "../src/languages";
-import { buildSystemPrompt, parseCard } from "../src/prompts";
+import { buildCatSystemPrompt, buildCatTurn, buildSystemPrompt, parseCard } from "../src/prompts";
 import { locFromString, locToString } from "../src/types";
 import { MemoryVault, fakeAi, sampleEpub } from "./sample";
 
@@ -167,7 +167,7 @@ async function main() {
 	const hlRows = view.containerEl.querySelectorAll(".bcr-hl-row").length;
 	const tabs = view.containerEl.querySelectorAll(".bcr-tab").length;
 	const selTool = view.containerEl.querySelectorAll(".bcr-seltool button").length;
-	check("hud", toolbarBtns >= 8 && /%/.test(label) && cards >= 3 && wordRows === 3 && hlRows >= 1 && tabs === 3 && selTool >= 10 && HUB_SECTIONS.every((s) => hub.includes(`## ${s}`)),
+	check("hud", toolbarBtns >= 8 && /%/.test(label) && cards >= 3 && wordRows === 3 && hlRows >= 1 && tabs === 4 && selTool >= 10 && HUB_SECTIONS.every((s) => hub.includes(`## ${s}`)),
 		`toolbar ${toolbarBtns} buttons, position "${label}", selection bar ${selTool} buttons, panel tabs ${tabs}: ${cards} AI answers, ${wordRows} words, ${hlRows} highlights; book page has all ${HUB_SECTIONS.length} sections`);
 
 	// --- flashcards: a card from a selected word, with its sentence and translation
@@ -264,6 +264,41 @@ async function main() {
 		&& prompt.includes("learning German") && prompt.includes("B1 (") && cardPrompt.includes("B1 learner of German") && viaView.level === "A2" && viaView.learningLanguage === "German"
 		&& pc.word === "der Sturm" && pc.translation === "буря" && pc.meaning === "strong wind" && pc.example === "Der Sturm kommt." && sentenceAround("One. The gales came. Three.", "gales") === "The gales came.",
 		"German books use your German level (B1) and English books your English level (C1); the language comes from the EPUB or the reader's picker; flashcard answers are read into word, translation, meaning and example");
+
+	// --- chat with the cat, kept as a note
+	const calls: { system: string; messages: any[] }[] = [];
+	(host as any).askAi = async (system: string, messages: any[]) => { calls.push({ system, messages }); return fakeAi(system, messages); };
+	const quoted = { text: "the sea spoke to her in a hundred dialects", loc: { chapter: 0, frac: 0.2 }, context: "" };
+	view.discuss(quoted);
+	const chipShown = !!view.containerEl.querySelector(".bcr-chat-quote");
+	const r1 = await view.chatSend("What does this line tell us about Mara?");
+	const s1 = view.chatSession()!;
+	const afterFirst = s1.messages.length;
+	const notePath1 = s1.notePath!;
+	const note1 = vault.files.get(notePath1) ?? "";
+	await view.chatSend("And why does she like the silence?");
+	const s2 = view.chatSession()!;
+	const note2 = vault.files.get(s2.notePath!) ?? "";
+	const hubNow = vault.files.get(notes.hubPath(view.meta!)) ?? "";
+	const chatNotes = Array.from(vault.files.keys()).filter((k) => k.includes("/Chats/"));
+	// a line the reader wrote under the transcript survives the next message
+	vault.files.set(s2.notePath!, (vault.files.get(s2.notePath!) ?? "") + "\nMy own thought: she is brave.\n");
+	await view.chatSend("Thanks, cat");
+	const note3 = vault.files.get(s2.notePath!) ?? "";
+	const bubbles = view.containerEl.querySelectorAll(".bcr-chat-msg").length;
+	const lastCall = calls[calls.length - 1];
+	const firstCall = calls[0];
+	view.newChat();
+	const startersShown = view.containerEl.querySelectorAll(".bcr-chat-starters button").length;
+	check("cat-chat", chipShown && r1?.text.startsWith("Mrrp!") && afterFirst === 2 && s2.id === s1.id && s2.messages.length === 6
+		&& firstCall.system.includes("reading cat") && firstCall.system.includes("B1") && firstCall.messages[0].content.includes("the sea spoke to her in a hundred dialects") && firstCall.messages[0].content.includes("Mara had kept")
+		&& lastCall.messages.length === 5 && lastCall.messages[0].role === "user" && lastCall.messages[1].role === "assistant"
+		&& note1.includes("> [!question] You") && note1.includes("> > the sea spoke to her") && note1.includes("> [!tip] 🐱 Cat") && note1.includes('book: "[[The Keeper of Gull Point]]"') && note1.includes("obsidian://book-reader")
+		&& note2.includes("And why does she like the silence?") && !note2.includes("Thanks, cat") && note3.includes("Thanks, cat") && note3.includes("My own thought: she is brave.")
+		&& chatNotes.length === 1 && hubNow.includes("## Discussions") && hubNow.includes(`[[${notePath1.split("/").pop()!.replace(/\.md$/, "")}]]`) && hubNow.split(notePath1.split("/").pop()!.replace(/\.md$/, "")).length === 2
+		&& bubbles >= 1 && startersShown === 4 && buildCatTurn("hi").trim() === "hi" && buildCatSystemPrompt(settings.learner, "T").includes("do not spoil"),
+		`the reader pointed the cat at a passage and talked over 3 messages; the cat got the page text and the earlier turns (${lastCall.messages.length} messages sent); one note ${notePath1.split("/").pop()} holds the transcript as callouts, is linked once under Discussions on the book page, and keeps what the reader wrote below it`);
+	(host as any).askAi = fakeAi;
 
 	// --- subscriptions: phone hand-off and desktop app commands
 	const sAi = { ...DEFAULT_SETTINGS.ai, provider: "claude-sub" as const };

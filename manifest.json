@@ -1,7 +1,7 @@
 {
   "id": "book-companion-reader",
   "name": "Book Companion Reader",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "minAppVersion": "1.7.2",
   "description": "Read PDF and EPUB books on desktop and mobile. Select text to have AI explain or simplify it for your language level, and keep highlights, notes, vocabulary and handwriting linked to each book.",
   "author": "Volodymyr Pavlyshyn",

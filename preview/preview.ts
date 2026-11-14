@@ -83,6 +83,13 @@ async function main() {
 	phone.epub?.relayout(0);
 	desk.epub?.relayout(0);
 	desk.selectText("few of them could fathom why anyone would choose such solitude");
+	if (location.hash === "#chat") {
+		const loc = { chapter: 0, frac: 0.2 };
+		await desk.chatSend("What does this line tell us about Mara?", { text: "The sea spoke to her in a hundred dialects", loc, context: "" });
+		await desk.chatSend("And why does she like the silence?");
+		desk.discuss({ text: "few of them could fathom why anyone would choose such solitude", loc, context: "" });
+		desk.openPanel("cat");
+	}
 	document.body.dataset.ready = "1";
 }
 

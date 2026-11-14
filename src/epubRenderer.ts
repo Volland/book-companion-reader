@@ -61,7 +61,7 @@ export class EpubRenderer {
 		this.viewport.toggleClass?.("is-scroll", opts.layout === "scroll");
 		this.viewport.classList.toggle("is-paged", opts.layout === "paged");
 		this.viewport.classList.toggle("is-scroll", opts.layout === "scroll");
-		this.content.setCssProps({ "font-size": `${opts.fontSize}px`, "line-height": String(opts.lineHeight) });
+		this.viewport.setCssProps({ "--bcr-font-size": `${opts.fontSize}px`, "--bcr-line-height": String(opts.lineHeight) });
 		this.content.dataset.font = opts.fontFamily;
 		this.lastW = 0;
 		this.relayout(frac);
@@ -125,13 +125,11 @@ export class EpubRenderer {
 		if (this.opts.layout === "paged") {
 			this.colW = Math.max(200, Math.min(MAX_COLUMN, W - 40));
 			const innerH = Math.max(200, H - 56);
-			this.clip.setCssProps({ width: `${this.colW}px`, height: `${innerH}px` });
-			this.content.setCssProps({ width: `${this.colW}px`, height: `${innerH}px`, "column-width": `${this.colW}px`, "column-gap": `${GAP}px`, "--bcr-img-max-h": `${innerH - 20}px` });
+			this.viewport.setCssProps({ "--bcr-col-w": `${this.colW}px`, "--bcr-col-h": `${innerH}px`, "--bcr-gap": `${GAP}px`, "--bcr-img-max-h": `${innerH - 20}px` });
 			this.pages = Math.max(1, Math.round((this.content.scrollWidth + GAP) / (this.colW + GAP)));
 			this.setPage(Math.min(this.pages - 1, Math.round(frac * this.pages)));
 		} else {
-			this.clip.setCssProps({ width: "", height: "" });
-			this.content.setCssProps({ width: "", height: "", "column-width": "", "column-gap": "", transform: "", "--bcr-img-max-h": "" });
+			this.viewport.setCssProps({ "--bcr-col-w": "", "--bcr-col-h": "", "--bcr-gap": "", "--bcr-shift": "", "--bcr-img-max-h": "" });
 			const max = this.viewport.scrollHeight - this.viewport.clientHeight;
 			this.viewport.scrollTop = frac * Math.max(0, max);
 		}
@@ -139,7 +137,7 @@ export class EpubRenderer {
 
 	private setPage(p: number) {
 		this.page = Math.max(0, Math.min(this.pages - 1, p));
-		this.content.setCssProps({ transform: `translateX(${-this.page * (this.colW + GAP)}px)` });
+		this.viewport.setCssProps({ "--bcr-shift": `${-this.page * (this.colW + GAP)}px` });
 		this.footer.textContent = this.pages > 1 ? `${this.book.chapters[this.chapter].title} · ${this.page + 1} / ${this.pages}` : this.book.chapters[this.chapter].title;
 		this.report();
 	}

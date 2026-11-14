@@ -154,8 +154,11 @@ mark.bcr-hl { background: color-mix(in srgb, var(--bcr-hl) 55%, transparent); co
 	hyphens: auto;
 	-webkit-hyphens: auto;
 	text-align: left;
+	font-size: var(--bcr-font-size, 18px);
+	line-height: var(--bcr-line-height, 1.6);
 }
-.bcr-epub-viewport.is-paged .bcr-epub-content { column-fill: auto; transition: transform .18s ease-out; }
+.bcr-epub-viewport.is-paged .bcr-epub-clip { width: var(--bcr-col-w); height: var(--bcr-col-h); }
+.bcr-epub-viewport.is-paged .bcr-epub-content { column-fill: auto; transition: transform .18s ease-out; width: var(--bcr-col-w); height: var(--bcr-col-h); column-width: var(--bcr-col-w); column-gap: var(--bcr-gap, 0px); transform: translateX(var(--bcr-shift, 0px)); }
 .bcr-epub-content[data-font="serif"] { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Noto Serif", serif; }
 .bcr-epub-content[data-font="sans"] { font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif; }
 .bcr-epub-content[data-font="theme"] { font-family: var(--font-text); }
@@ -204,8 +207,9 @@ mark.bcr-hl { background: color-mix(in srgb, var(--bcr-hl) 55%, transparent); co
 .bcr-stage.is-inking .bcr-textLayer { pointer-events: none; }
 
 /* handwriting */
-.bcr-ink-canvas { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
-.bcr-ink-canvas.is-drawing { cursor: crosshair; }
+.bcr-ink-canvas { position: absolute; inset: 0; z-index: 3; pointer-events: none; touch-action: auto; }
+.bcr-ink-canvas.is-drawing { cursor: crosshair; pointer-events: auto; touch-action: none; }
+.bcr-toc-item { padding-left: var(--bcr-indent, 0px); }
 .bcr-hw-modal { width: min(960px, 96vw); max-width: 96vw; }
 .bcr-hw-scroller { max-height: 68vh; overflow: auto; display: flex; justify-content: center; padding: 4px; background: var(--background-secondary); border-radius: 8px; }
 .bcr-hw-sheet { position: relative; flex-shrink: 0; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
@@ -303,3 +307,23 @@ mark.bcr-hl { background: color-mix(in srgb, var(--bcr-hl) 55%, transparent); co
 .bcr-study-buttons button { display: inline-flex; flex-direction: column; align-items: center; min-width: 92px; height: auto; padding: 8px 14px; }
 .bcr-study-next { font-size: 10.5px; opacity: .75; }
 .bcr-study-end { text-align: center; padding: 20px 0; }
+
+/* ---- chat with the cat ---- */
+.bcr-chat { display: flex; flex-direction: column; min-height: 100%; }
+.bcr-chat-bar { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.bcr-chat-bar select { flex: 1; min-width: 0; }
+.bcr-chat-log { display: flex; flex-direction: column; gap: 8px; flex: 1; padding-bottom: 8px; }
+.bcr-chat-msg { display: flex; gap: 6px; max-width: 94%; }
+.bcr-chat-msg.is-user { align-self: flex-end; }
+.bcr-chat-who { font-size: 20px; line-height: 1.2; flex: none; }
+.bcr-chat-text { padding: 8px 11px; border-radius: 14px; background: var(--background-secondary-alt, var(--background-secondary)); font-size: var(--font-ui-small); line-height: 1.45; min-width: 0; overflow-wrap: anywhere; }
+.bcr-chat-msg.is-user .bcr-chat-text { background: var(--interactive-accent); color: var(--text-on-accent); border-bottom-right-radius: 4px; }
+.bcr-chat-msg.is-cat .bcr-chat-text { border-top-left-radius: 4px; }
+.bcr-chat-msg.is-error .bcr-chat-text { color: var(--text-error); }
+.bcr-chat-text > :first-child { margin-top: 0; }
+.bcr-chat-text > :last-child { margin-bottom: 0; }
+.bcr-chat-quoted { font-style: italic; opacity: .85; border-left: 3px solid currentColor; padding-left: 8px; margin-bottom: 6px; font-size: var(--font-ui-smaller); }
+.bcr-chat-starters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.bcr-chat-input { position: sticky; bottom: 0; background: var(--background-primary); padding-top: 6px; }
+.bcr-chat-quote { display: flex; align-items: center; gap: 6px; font-size: var(--font-ui-smaller); font-style: italic; color: var(--text-muted); border-left: 3px solid var(--interactive-accent); padding: 2px 6px; margin-bottom: 6px; }
+.bcr-chat-quote span { flex: 1; min-width: 0; }

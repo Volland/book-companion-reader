@@ -268,7 +268,7 @@ export class PdfRenderer {
 	async outline(): Promise<{ title: string; page: number; depth: number }[]> {
 		const out: { title: string; page: number; depth: number }[] = [];
 		const doc = this.doc;
-		let items: PdfOutlineItem[] | null = null;
+		let items: PdfOutlineItem[] | null;
 		try { items = (await doc?.getOutline()) ?? null; } catch { items = null; }
 		if (!doc || !items) return out;
 		const walk = async (list: PdfOutlineItem[], depth: number) => {

@@ -49,6 +49,33 @@ export interface AiCard {
 	handoffReason?: string;
 }
 
+/** One message in a talk with the reading cat. */
+export interface ChatMsg {
+	id: string;
+	role: "user" | "cat";
+	text: string;
+	created: number;
+	/** Where in the book the reader was when they asked. */
+	loc?: Loc;
+	/** A passage the question is about. */
+	quote?: string;
+	error?: boolean;
+	/** Set when the question is waiting to be answered in the person's chat app. */
+	handoff?: string;
+	handoffReason?: string;
+}
+
+/** A discussion about the book, kept in the plugin data and as a note in the book's folder. */
+export interface ChatSession {
+	id: string;
+	title: string;
+	created: number;
+	updated: number;
+	messages: ChatMsg[];
+	notePath?: string;
+	language?: string;
+}
+
 export interface BookData {
 	path: string;
 	format: BookFormat;
@@ -64,6 +91,7 @@ export interface BookData {
 	/** Handwriting drawn straight onto PDF pages, keyed "p<page>". */
 	ink: Record<string, InkStroke[]>;
 	ai: AiCard[];
+	chats: ChatSession[];
 }
 
 export interface BookMeta {
@@ -108,7 +136,7 @@ export function bookLink(path: string, loc?: Loc): string {
 }
 
 export function emptyBook(path: string, format: BookFormat): BookData {
-	return { path, format, highlights: [], vocab: [], ink: {}, ai: [] };
+	return { path, format, highlights: [], vocab: [], ink: {}, ai: [], chats: [] };
 }
 
 export function formatOf(ext: string): BookFormat | null {

@@ -110,6 +110,36 @@ export function buildUserPrompt(input: PromptInput, l: LearnerSettings): string 
 	}
 }
 
+/** Things to tap when the chat is empty. */
+export const CAT_STARTERS = [
+	"What is happening on this page?",
+	"Summarise what I've read so far",
+	"Quiz me on this chapter",
+	"What do you think the author means here?",
+];
+
+export function buildCatSystemPrompt(l: LearnerSettings, bookTitle?: string, bookAuthor?: string): string {
+	const lines = [
+		"You are the reading cat: a small, warm, curious cat who sits on a pile of books and reads along with the reader. You talk about the book like a good book-club friend: you share a view, connect ideas, ask what the reader thinks, and quiz them gently when they ask.",
+		"Keep replies short and conversational (2 to 5 sentences unless asked for more). Markdown is fine. A light cat touch (one 'mrrp' or a purr now and then) is welcome, but clarity comes first.",
+		"Only use the page text you are given and what the reader has told you. Never invent plot, quotes or facts about the book; if you don't know, say so and ask. You only know the pages shown so far, so do not spoil what comes later.",
+		`The reader's native language is ${l.nativeLanguage}. They are learning ${l.learningLanguage}; their level is ${LEVEL_TEXT[l.level] ?? l.level}.`,
+		`Reply in ${explanationLanguage(l)}, unless the reader writes to you in another language: then answer in that language. If they want to practise ${l.learningLanguage}, chat in it at their level and gently correct their mistakes.`,
+	];
+	if (bookTitle) lines.push(`The book is "${bookTitle}"${bookAuthor ? ` by ${bookAuthor}` : ""}.`);
+	if (l.extraInstructions.trim()) lines.push(`Reader's note: ${l.extraInstructions.trim()}`);
+	return lines.join("\n");
+}
+
+/** The reader's message with what is on screen (and the passage they pointed at) as context. */
+export function buildCatTurn(text: string, o: { page?: string; quote?: string } = {}): string {
+	const parts: string[] = [];
+	if (o.page?.trim()) parts.push(`(What is on the reader's screen now:\n"""\n${o.page.length > 3000 ? o.page.slice(0, 3000) + "…" : o.page}\n""")`);
+	if (o.quote?.trim()) parts.push(`(The reader is pointing at this passage:\n"""\n${o.quote}\n""")`);
+	parts.push(text);
+	return parts.join("\n\n");
+}
+
 export interface ParsedWord {
 	word: string;
 	definition: string;

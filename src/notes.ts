@@ -1,6 +1,6 @@
 import type { NotesSettings } from "./settings";
 import { Card, Deck, deckToMarkdown } from "./decks";
-import { BookMeta, Highlight, Loc, VocabEntry, bookLink, locLabel, locToString } from "./types";
+import { BookMeta, ChatSession, Highlight, Loc, VocabEntry, bookLink, locLabel, locToString } from "./types";
 import { COMPANION_SCHEMA, COMPANION_SCHEMA_NAME, LIBRARY_SCHEMA, LIBRARY_SCHEMA_NAME, TypedState, declaresBook, edgeLine } from "./typed";
 
 /** The few vault operations the notes system needs (so it can be tested without Obsidian). */
@@ -66,7 +66,7 @@ export function getFrontmatterField(content: string, key: string): string | unde
 	return line?.slice(key.length + 1).trim();
 }
 
-export const HUB_SECTIONS = ["Highlights", "Notes", "Handwriting", "Vocabulary", "AI explanations"];
+export const HUB_SECTIONS = ["Highlights", "Notes", "Handwriting", "Vocabulary", "AI explanations", "Discussions"];
 
 export class BookNotes {
 	constructor(private host: NotesHost, private settings: () => NotesSettings, private typed: () => TypedState = () => ({ on: false, schemaFolder: "Types" })) {}
@@ -160,6 +160,8 @@ export class BookNotes {
 			"",
 			"## AI explanations",
 			"",
+			"## Discussions",
+			"",
 		].join("\n");
 	}
 
@@ -194,6 +196,8 @@ export class BookNotes {
 			"## Vocabulary",
 			"",
 			"## AI explanations",
+			"",
+			"## Discussions",
 			"",
 			"## Links",
 			"",
@@ -316,6 +320,55 @@ export class BookNotes {
 			if (e.context) content += `<!-- ${e.context.replace(/-->/g, "").slice(0, 200)} -->\n`;
 		}
 		await this.host.write(path, content);
+		return path;
+	}
+
+	/**
+	 * A talk with the reading cat as a note in the book's Chats folder, linked from the book page. The transcript sits between
+	 * two markers and is rewritten as the talk goes on; anything you write outside them is kept.
+	 */
+	async saveChat(meta: BookMeta, session: ChatSession): Promise<string> {
+		const hub = this.hubName(meta);
+		await this.ensureHub(meta);
+		const callout = (kind: string, title: string, body: string[]) => [`> [!${kind}] ${title}`, ...body.map((l) => (l ? `> ${l}` : ">"))];
+		const lines: string[] = [];
+		for (const m of session.messages) {
+			if (!m.text.trim() || m.error) continue;
+			if (m.role === "user") {
+				const place = m.loc ? ` · ${this.link(meta, m.loc)}` : "";
+				const body = [...(m.quote ? [`> ${m.quote.replace(/\s+/g, " ").trim()}`, ""] : []), ...m.text.trim().split("\n")];
+				lines.push(...callout("question", `You${place}`, body), "");
+			} else lines.push(...callout("tip", "🐱 Cat", m.text.trim().split("\n")), "");
+		}
+		const block = `<!-- chat:start -->\n${lines.join("\n")}\n<!-- chat:end -->`;
+		let path = session.notePath;
+		if (path && this.host.exists(path)) {
+			const old = await this.host.read(path);
+			const next = /<!-- chat:start -->[\s\S]*<!-- chat:end -->/.test(old) ? old.replace(/<!-- chat:start -->[\s\S]*<!-- chat:end -->/, () => block) : `${old.replace(/\s+$/, "")}\n\n${block}\n`;
+			if (next !== old) await this.host.write(path, next);
+			return path;
+		}
+		path = await this.uniquePath(`${this.folder(meta)}/Chats`, `${today()} ${safeName(session.title, 50)}`);
+		const typed = this.isTyped();
+		const head = [
+			"---",
+			typed ? "type: ReadingNote" : "type: book-chat",
+			`book: ${yamlStr(`[[${hub}]]`)}`,
+			`created: ${today(new Date(session.created))}`,
+			...(session.language ? [`language: ${yamlStr(session.language)}`] : []),
+			"tags:",
+			"  - book-chat",
+			"---",
+			`# 🐱 ${session.title}`,
+			`A talk with the reading cat about [[${hub}]] · ${this.link(meta, undefined, "Open in the reader")}`,
+			"",
+			block,
+			"",
+		];
+		if (typed) head.push("## Links", "", edgeLine("note_on", hub), "");
+		await this.host.write(path, head.join("\n"));
+		session.notePath = path;
+		await this.appendToHub(meta, "Discussions", `- [[${path.split("/").pop()!.replace(/\.md$/, "")}]] — ${today(new Date(session.created))}`);
 		return path;
 	}
 
