@@ -84,6 +84,8 @@ export interface BookData {
 	loc?: Loc;
 	/** The language this book is read in, when picked by hand (otherwise taken from the EPUB). */
 	language?: string;
+	/** The book's page in the vault, when it was linked to one made earlier. */
+	hub?: string;
 	progress?: number;
 	lastOpened?: number;
 	highlights: Highlight[];
@@ -96,6 +98,8 @@ export interface BookData {
 
 export interface BookMeta {
 	path: string;
+	/** The book's page in the vault, when it is not at the default place (a book added to the shelves before its file). */
+	hub?: string;
 	title: string;
 	author?: string;
 	format: BookFormat;

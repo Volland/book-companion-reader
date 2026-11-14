@@ -50,6 +50,15 @@ export function sampleEpub(): Uint8Array {
 
 /** Answers shaped like a real model's, so every button has something to work with. */
 export async function fakeAi(system: string, messages: ChatMessage[]): Promise<string> {
+	if (system.includes("librarian cat")) {
+		return [
+			"Here you go:",
+			"- **The Old Man and the Sea** — Ernest Hemingway — A short, quiet story of one person and the sea, like your Gull Point lighthouse book.",
+			"- **To the Lighthouse** — Virginia Woolf — Another lighthouse novel, if you liked The Keeper of Gull Point.",
+			"- **Dune** — Frank Herbert — You already have this.",
+			"- **Moby-Dick** — Herman Melville — Sea again, but long.",
+		].join("\n");
+	}
 	if (system.includes("reading cat")) {
 		const turns = messages.filter((m) => m.role === "user").length;
 		const asked = messages[messages.length - 1].content.split("\n\n").pop() ?? "";

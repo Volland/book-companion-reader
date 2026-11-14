@@ -1,5 +1,6 @@
 import type { NotesSettings } from "./settings";
 import { Card, Deck, deckToMarkdown } from "./decks";
+import type { Status } from "./library";
 import { BookMeta, ChatSession, Highlight, Loc, VocabEntry, bookLink, locLabel, locToString } from "./types";
 import { COMPANION_SCHEMA, COMPANION_SCHEMA_NAME, LIBRARY_SCHEMA, LIBRARY_SCHEMA_NAME, TypedState, declaresBook, edgeLine } from "./typed";
 
@@ -106,6 +107,7 @@ export class BookNotes {
 	}
 
 	folder(meta: BookMeta): string {
+		if (meta.hub) return meta.hub.split("/").slice(0, -1).join("/");
 		const root = this.settings().rootFolder.replace(/\/+$/, "") || "Books";
 		return `${root}/${safeName(meta.title)}`;
 	}
@@ -115,6 +117,7 @@ export class BookNotes {
 	}
 
 	hubPath(meta: BookMeta): string {
+		if (meta.hub) return meta.hub;
 		return `${this.folder(meta)}/${this.hubName(meta)}.md`;
 	}
 
@@ -372,6 +375,153 @@ export class BookNotes {
 		return path;
 	}
 
+	// ---------- the library: books on the shelves, with or without a file ----------
+
+	libraryFolder(): string {
+		return `${this.settings().rootFolder.replace(/\/+$/, "") || "Books"}/Library`;
+	}
+
+	/** A book that isn't a file yet (a paper book, a wishlist title, a suggestion): its page goes in the Books folder like any other. */
+	async createShelfBook(info: { title: string; author?: string; status: Status; format?: "paper" | "ebook" | "audio"; why?: string; genres?: string[]; pages?: number; year?: number }): Promise<string> {
+		const title = info.title.trim();
+		const folder = `${this.settings().rootFolder.replace(/\/+$/, "") || "Books"}/${safeName(title)}`;
+		const path = `${folder}/${safeName(title)}.md`;
+		if (this.host.exists(path)) return path;
+		await this.ensureSchema().catch(() => []);
+		await this.host.ensureFolder(folder);
+		const typed = this.isTyped();
+		const author = info.author?.trim();
+		const genres = (info.genres ?? []).map((g) => g.trim()).filter(Boolean);
+		const lines = [
+			"---",
+			typed ? "type: Book" : "type: book",
+			`title: ${yamlStr(title)}`,
+			`author: ${yamlStr(author ?? "")}`,
+			`status: ${info.status}`,
+			`format: ${info.format ?? "paper"}`,
+			...(info.pages ? [`pages: ${info.pages}`] : []),
+			...(info.year ? [`year: ${info.year}`] : []),
+			"progress: 0",
+			`added: ${today()}`,
+			...(info.status === "reading" ? [`started: ${today()}`] : []),
+			...(info.why ? [`why: ${yamlStr(info.why)}`] : []),
+			"tags:",
+			"  - book",
+			...genres.map((g) => `  - genre/${g.toLowerCase().replace(/\s+/g, "-")}`),
+			"---",
+			`# ${title}`,
+			author ? `*by ${author}*\n` : "",
+			...(info.why ? [`> ${info.why}`, ""] : []),
+			"## Highlights", "", "## Notes", "", "## Handwriting", "", "## Vocabulary", "", "## AI explanations", "", "## Discussions", "",
+		];
+		if (typed) {
+			lines.push("## Links", "");
+			lines.push(author ? edgeLine("written_by", safeName(author), { role: "author" }) : "<!-- add written_by:: [[Author]] here -->");
+			for (const g of genres) lines.push(edgeLine("has_genre", safeName(g)));
+			lines.push("");
+		}
+		await this.host.write(path, lines.join("\n"));
+		if (author) await this.ensureAuthor(author);
+		return path;
+	}
+
+	/** A note for an author, listing their books on the shelves. */
+	async ensureAuthor(name: string): Promise<string> {
+		const root = this.settings().rootFolder.replace(/\/+$/, "") || "Books";
+		const path = `${root}/Authors/${safeName(name)}.md`;
+		if (this.host.exists(path)) return path;
+		await this.host.ensureFolder(`${root}/Authors`);
+		await this.host.write(path, [
+			"---",
+			this.isTyped() ? "type: Author" : "type: author",
+			`title: ${yamlStr(name)}`,
+			"tags:",
+			"  - author",
+			"---",
+			`# ${name}`,
+			"",
+			"## Books",
+			"",
+			"```book-shelf",
+			`author: ${name}`,
+			"view: list",
+			"```",
+			"",
+		].join("\n"));
+		return path;
+	}
+
+	/** Change fields on a book's page (status, rating, dates…). A value of undefined leaves the field alone. */
+	async setHubFields(path: string, fields: Record<string, string | number | undefined>): Promise<void> {
+		if (!this.host.exists(path)) return;
+		const content = await this.host.read(path);
+		let next = content;
+		for (const [k, v] of Object.entries(fields)) if (v !== undefined) next = setFrontmatterField(next, k, v);
+		if (next !== content) await this.host.write(path, next);
+	}
+
+	async setStatus(path: string, status: Status): Promise<void> {
+		if (!this.host.exists(path)) return;
+		const content = await this.host.read(path);
+		const fields: Record<string, string | number | undefined> = { status };
+		if (status === "reading" && !getFrontmatterField(content, "started")) fields.started = today();
+		if (status === "finished") {
+			fields.finished = today();
+			if (!getFrontmatterField(content, "started")) fields.started = today();
+		}
+		await this.setHubFields(path, fields);
+	}
+
+	/** Point a book's page at its PDF or EPUB. */
+	async linkFile(hubPath: string, file: string, fileFormat: "pdf" | "epub"): Promise<void> {
+		await this.setHubFields(hubPath, { file: `[[${file}]]`, file_format: fileFormat, format: "ebook" });
+	}
+
+	/** The pages that show your library: current reads, up next, suggestions, finished books and a reading log. */
+	libraryPages(): { name: string; content: string }[] {
+		const typed = this.isTyped();
+		const front = (title: string) => ["---", "type: library", `title: ${yamlStr(title)}`, "tags:", "  - library", "---", `# ${title}`, ""];
+		const block = (lines: string[]) => ["```book-shelf", ...lines, "```", ""];
+		const nav = "[[Library]] · [[Currently reading]] · [[Up next]] · [[Wishlist]] · [[Suggested reading]] · [[Finished]] · [[Reading log]]";
+		const graph = typed ? [
+			"## Your reading as a graph", "",
+			"```graph-query", "MATCH (b:Book)-[:written_by]->(a:Author)", "RETURN a.title AS author, count(b) AS books", "ORDER BY books DESC", "```", "",
+			"```graph-query", "MATCH (b:Book)-[:has_genre]->(g:Genre)", "RETURN g.title AS genre, count(b) AS books", "ORDER BY books DESC", "```", "",
+		] : [];
+		const page = (name: string, intro: string, body: string[]) => ({ name, content: [...front(name), intro, "", ...body, nav, ""].join("\n") });
+		return [
+			{ name: "Library", content: [
+				...front("📚 Library"),
+				"## Currently reading", "", ...block(["shelf: reading"]),
+				"## Up next", "", ...block(["shelf: to-read", "limit: 6"]),
+				"## Suggested for you", "", ...block(["shelf: suggested", "limit: 4"]),
+				"## Recently finished", "", ...block(["shelf: finished", "limit: 6"]),
+				"## This year", "", ...block(["view: stats"]),
+				nav, "",
+			].join("\n") },
+			page("Currently reading", "What you are reading now. Tap a book to carry on where you stopped.", block(["shelf: reading"])),
+			page("Up next", "Books you plan to read soon.", block(["shelf: to-read"])),
+			page("Wishlist", "Books you want some day.", block(["shelf: wishlist", "view: list"])),
+			page("Suggested reading", "Books the librarian cat suggests, based on what you've read and loved. Open the library to ask for more.", block(["shelf: suggested"])),
+			page("Finished", "Everything you have finished, newest first.", block(["shelf: finished", "view: list"])),
+			page("Reading log", "How your reading year is going.", [...block(["view: stats"]), ...block(["shelf: finished", "view: list", "sort: finished"]), ...graph]),
+		];
+	}
+
+	/** Write the library pages that don't exist yet (existing ones are never touched). Returns the ones created. */
+	async ensureLibraryPages(): Promise<string[]> {
+		const folder = this.libraryFolder();
+		await this.host.ensureFolder(folder);
+		const created: string[] = [];
+		for (const p of this.libraryPages()) {
+			const path = `${folder}/${p.name}.md`;
+			if (this.host.exists(path)) continue;
+			await this.host.write(path, p.content);
+			created.push(path);
+		}
+		return created;
+	}
+
 	/** A deck as a note in the Books folder, in the "word :: meaning" format flashcard plugins read. */
 	async exportDeck(deck: Deck, cards: Card[]): Promise<string> {
 		const root = this.settings().rootFolder.replace(/\/+$/, "") || "Books";
@@ -404,6 +554,12 @@ export class BookNotes {
 		const content = await this.host.read(path);
 		let next = setFrontmatterField(content, "progress", Math.round(progress * 100));
 		next = setFrontmatterField(next, "last_read", today());
+		// opening a book from the Up next or Wishlist shelf starts it
+		const status = getFrontmatterField(next, "status");
+		if (progress > 0 && (status === "to-read" || status === "wishlist")) {
+			next = setFrontmatterField(next, "status", "reading");
+			if (!getFrontmatterField(next, "started")) next = setFrontmatterField(next, "started", today());
+		}
 		if (progress >= 0.99 && getFrontmatterField(next, "status") !== "finished") {
 			next = setFrontmatterField(next, "status", "finished");
 			next = setFrontmatterField(next, "finished", today());

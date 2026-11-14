@@ -16,7 +16,7 @@ import { AiClient, HandoffNeeded } from "../src/ai";
 import { buildCliCommand } from "../src/cliRunner";
 import { parseEpub } from "../src/epub";
 import { strokesToSvg, svgToStrokes, eraseAt } from "../src/ink";
-import { BookNotes, HUB_SECTIONS, insertUnderHeading, setFrontmatterField } from "../src/notes";
+import { BookNotes, HUB_SECTIONS, insertUnderHeading, setFrontmatterField, today } from "../src/notes";
 import { buildUserPrompt, parseVocabulary } from "../src/prompts";
 import { ReaderView } from "../src/readerView";
 import { DEFAULT_SETTINGS, mergeSettings } from "../src/settings";
@@ -24,6 +24,8 @@ import { BookStore } from "../src/store";
 import { Card, DeckStore, INTERVALS, dayNumber, deckToMarkdown, sentenceAround } from "../src/decks";
 import { CardModal, DecksView, renderStudy } from "../src/decksView";
 import { languageName, profileFor } from "../src/languages";
+import { LibraryBook, SuggestionStore, buildLibrarianSystem, buildSuggestPrompt, collectBooks, libraryStats, parseFrontmatter, parseShelfBlock, parseSuggestions, shelf } from "../src/library";
+import { renderShelfBlock } from "../src/libraryView";
 import { buildCatSystemPrompt, buildCatTurn, buildSystemPrompt, parseCard } from "../src/prompts";
 import { locFromString, locToString } from "../src/types";
 import { MemoryVault, fakeAi, sampleEpub } from "./sample";
@@ -299,6 +301,96 @@ async function main() {
 		&& bubbles >= 1 && startersShown === 4 && buildCatTurn("hi").trim() === "hi" && buildCatSystemPrompt(settings.learner, "T").includes("do not spoil"),
 		`the reader pointed the cat at a passage and talked over 3 messages; the cat got the page text and the earlier turns (${lastCall.messages.length} messages sent); one note ${notePath1.split("/").pop()} holds the transcript as callouts, is linked once under Discussions on the book page, and keeps what the reader wrote below it`);
 	(host as any).askAi = fakeAi;
+
+	// --- the library: books with and without files, statuses, shelves, stats
+	const bookHubs = () => Array.from(vault.files.entries()).filter(([k]) => k.startsWith("Books/") && k.endsWith(".md")).map(([path, text]) => ({ path, fm: parseFrontmatter(text) }));
+	const keeperFile = { path: "Library/Keeper.epub", extension: "epub", basename: "Keeper", title: "The Keeper of Gull Point", author: "A. Sample", progress: 0.2, lastOpened: Date.now() };
+	const duneHub = await notes.createShelfBook({ title: "Dune", author: "Frank Herbert", status: "to-read", format: "paper", genres: ["Science fiction"], why: "A friend said it changed how they read.", pages: 612 });
+	const duneAgain = await notes.createShelfBook({ title: "Dune", author: "Someone Else", status: "wishlist" });
+	const emmaHub = await notes.createShelfBook({ title: "Emma", author: "Jane Austen", status: "wishlist", format: "ebook" });
+	await notes.setStatus(duneHub, "reading");
+	const dReading = parseFrontmatter(vault.files.get(duneHub) ?? "");
+	await notes.setHubFields(duneHub, { rating: 5 });
+	await notes.setStatus(duneHub, "finished");
+	const dDone = parseFrontmatter(vault.files.get(duneHub) ?? "");
+	const authorNote = vault.files.get("Books/Authors/Frank Herbert.md") ?? "";
+	const dunePage = vault.files.get(duneHub) ?? "";
+	let books = collectBooks(bookHubs(), [keeperFile, { path: "Library/Loose.pdf", extension: "pdf", basename: "Loose" }]);
+	const byTitle = (t: string) => books.find((b) => b.title === t)!;
+	const wrongYear = new Date().getFullYear() - 1;
+	check("library-books", duneAgain === duneHub && (vault.files.get(duneHub) ?? "").includes("Frank Herbert") && dReading.status === "reading" && !!dReading.started && dDone.status === "finished" && dDone.finished === today() && dDone.rating === 5
+		&& dunePage.includes("genre/science-fiction") && dunePage.includes("> A friend said it changed") && authorNote.includes("```book-shelf") && authorNote.includes("author: Frank Herbert")
+		&& byTitle("Dune").status === "finished" && byTitle("Dune").pages === 612 && byTitle("Dune").genres[0] === "science fiction" && byTitle("Emma").status === "wishlist" && byTitle("Emma").format === "ebook"
+		&& byTitle("The Keeper of Gull Point").file === "Library/Keeper.epub" && byTitle("The Keeper of Gull Point").status === "reading" && byTitle("Loose").status === "to-read" && byTitle("Loose").hub === undefined && wrongYear > 2000,
+		"a paper book, a wishlist title and a finished book each got a page (not made twice) with status, dates, rating and genre; their author got a note; book files without a page appear on the shelves");
+
+	const reading = shelf(books, "reading");
+	const finishedShelf = shelf(books, "finished");
+	const st = libraryStats(books, new Date().getFullYear(), 4);
+	const dune = byTitle("Dune");
+	check("shelves", reading.some((b) => b.title === "The Keeper of Gull Point") && !reading.some((b) => b.title === "Dune") && finishedShelf.length === 1 && shelf(books, "all").length === books.length
+		&& shelf(books, "all", { author: "Frank Herbert" }).length === 1 && shelf(books, "finished", { year: 1999 }).length === 0
+		&& st.finished === 1 && st.pages === 612 && st.avgRating === 5 && st.goalProgress === 0.25 && st.topAuthors[0].author === "Frank Herbert" && st.byMonth.reduce((a, b) => a + b, 0) === 1 && st.counts.wishlist === 1 && dune.rating === 5,
+		`current reads, finished and wishlist shelves; ${st.finished} finished this year of a goal of ${st.goal} (${Math.round(st.goalProgress * 100)}%), ${st.pages} pages, average rating ${st.avgRating}`);
+
+	// starting a book from the shelf, and linking a file to a book that had none
+	await notes.updateProgress({ path: "Library/Emma.epub", format: "epub", title: "Emma", hub: emmaHub }, 0.1);
+	const eStarted = parseFrontmatter(vault.files.get(emmaHub) ?? "");
+	await notes.linkFile(emmaHub, "Library/Emma.epub", "epub");
+	const eLinked = parseFrontmatter(vault.files.get(emmaHub) ?? "");
+	const linkedMeta = { path: "Library/Emma.epub", format: "epub" as const, title: "Emma (Penguin edition)", hub: emmaHub };
+	const eBook = collectBooks(bookHubs(), [{ path: "Library/Emma.epub", extension: "epub", basename: "Emma", progress: 0.1 }]).find((b) => b.title === "Emma")!;
+	check("start-and-link", eStarted.status === "reading" && !!eStarted.started && eLinked.file === "[[Library/Emma.epub]]" && eLinked.file_format === "epub" && notes.hubPath(linkedMeta) === emmaHub && notes.folder(linkedMeta) === "Books/Emma"
+		&& eBook.file === "Library/Emma.epub" && eBook.fileFormat === "epub" && collectBooks(bookHubs(), [{ path: "Library/Emma.epub", extension: "epub", basename: "Emma" }]).filter((b) => b.title === "Emma" || b.file === "Library/Emma.epub").length === 1,
+		"opening a book from Up next or the wishlist starts it (status reading, start date); a book added without a file can be linked to its EPUB and keeps one page and one shelf entry, even when the file has another title");
+
+	// --- the librarian cat: suggestions
+	const sugStore = new SuggestionStore(async () => {});
+	const prompt2 = buildSuggestPrompt(books, settings.learner, { count: 5, focus: "Easier to read for my level", dismissed: ["Ulysses"], pending: [] });
+	const answer = await fakeAi(buildLibrarianSystem(settings.learner), [{ role: "user", content: prompt2 }]);
+	const parsedSug = parseSuggestions(answer);
+	const added1 = sugStore.add(parsedSug, books.map((b) => b.title), "Surprise me");
+	const added2 = sugStore.add(parsedSug, books.map((b) => b.title));
+	const first = sugStore.take(added1[0].id, true);
+	const added3 = sugStore.add(parsedSug, books.map((b) => b.title));
+	const reload = new SuggestionStore(async () => {});
+	reload.load(JSON.parse(JSON.stringify(sugStore.toJSON())));
+	check("librarian", parsedSug.length === 4 && parsedSug[0].title === "The Old Man and the Sea" && parsedSug[0].author === "Ernest Hemingway" && parsedSug[0].why.includes("Gull Point")
+		&& added1.length === 3 && !added1.some((s) => s.title === "Dune") && added2.length === 0 && first?.title === "The Old Man and the Sea" && added3.length === 0 && reload.dismissed.length === 1 && reload.items.length === 2
+		&& prompt2.includes("Dune — Frank Herbert (rated 5/5) [science fiction]") && prompt2.includes("Do not suggest these again: Ulysses") && prompt2.includes("level B1") && prompt2.includes("I'm reading now") && prompt2.includes("- **Title** — Author —"),
+		"the librarian is told what you finished (best rated first), are reading and want, what to skip and your language level; its answer is read into suggestions, books you already have or waved away are left out, and the list survives a restart");
+
+	// --- pages in the vault and the book-shelf block
+	const created = await notes.ensureLibraryPages();
+	const again2 = await notes.ensureLibraryPages();
+	const libPage = vault.files.get("Books/Library/Library.md") ?? "";
+	const logPage = vault.files.get("Books/Library/Reading log.md") ?? "";
+	const tn2 = new BookNotes(new MemoryVault(), () => settings.notes, () => ({ on: true, schemaFolder: "Types" }));
+	const typedLog = tn2.libraryPages().find((p) => p.name === "Reading log")!.content;
+	const blockCfg = parseShelfBlock("shelf: reading\nlimit: 3\nview: list\nauthor: Frank Herbert\nsort: rating");
+	const actions: any = { calls: [] as string[] };
+	for (const k of ["open", "openPage", "setStatus", "setRating", "linkFile", "shelveSuggestion", "dismissSuggestion"]) actions[k] = async (...a: any[]) => { actions.calls.push(`${k}:${a.map((x) => x?.title ?? x?.id ?? x).join(",")}`); };
+	const ctx = { books, suggestions: sugStore.items, goal: 4, actions };
+	const shelfEl = document.createElement("div");
+	renderShelfBlock(shelfEl, parseShelfBlock("shelf: finished"), ctx);
+	(shelfEl.querySelector(".bcr-star:nth-child(4)") as any)?.click();
+	(shelfEl.querySelector(".bcr-lib-actions button") as any)?.click();
+	const list = document.createElement("div");
+	renderShelfBlock(list, parseShelfBlock("shelf: all\nview: list"), ctx);
+	const statsEl = document.createElement("div");
+	renderShelfBlock(statsEl, parseShelfBlock("view: stats"), ctx);
+	const sugEl = document.createElement("div");
+	renderShelfBlock(sugEl, parseShelfBlock("shelf: suggested\nlimit: 1"), ctx);
+	(sugEl.querySelector(".bcr-sug .bcr-chip.mod-cta") as any)?.click();
+	const emptyEl = document.createElement("div");
+	renderShelfBlock(emptyEl, parseShelfBlock("shelf: abandoned"), ctx);
+	check("library-pages", created.length === 7 && again2.length === 0 && libPage.includes("```book-shelf\nshelf: reading") && libPage.includes("shelf: suggested") && libPage.includes("view: stats") && logPage.includes("sort: finished")
+		&& !logPage.includes("graph-query") && typedLog.includes("MATCH (b:Book)-[:written_by]->(a:Author)") && typedLog.includes("has_genre")
+		&& blockCfg.shelf === "reading" && blockCfg.limit === 3 && blockCfg.view === "list" && blockCfg.author === "Frank Herbert" && blockCfg.sort === "rating"
+		&& shelfEl.querySelectorAll(".bcr-lib-card").length === 1 && shelfEl.querySelector(".bcr-status")?.textContent === "Finished" && actions.calls.includes("setRating:Dune,4") && actions.calls.some((c: string) => c.startsWith("open:"))
+		&& list.querySelectorAll(".bcr-lib-row").length === books.length && statsEl.querySelectorAll(".bcr-stat-tile").length >= 3 && statsEl.querySelectorAll(".bcr-month").length === 12
+		&& sugEl.querySelectorAll(".bcr-sug").length === 1 && actions.calls.some((c: string) => c.startsWith("shelveSuggestion:")) && (emptyEl.textContent ?? "").includes("Nothing here yet"),
+		"seven library pages (never overwritten) made of live book-shelf blocks, with Typed Graph queries only when Typed Graph is on; shelf, list, stats and suggestion blocks draw; rating and shelving work from them");
 
 	// --- subscriptions: phone hand-off and desktop app commands
 	const sAi = { ...DEFAULT_SETTINGS.ai, provider: "claude-sub" as const };

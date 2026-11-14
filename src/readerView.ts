@@ -224,7 +224,7 @@ export class ReaderView extends FileView {
 		if (!format) return;
 		this.book = this.host.store.get(file.path, format);
 		this.book.lastOpened = Date.now();
-		this.meta = { path: file.path, format, title: this.book.title ?? file.basename, author: this.book.author };
+		this.meta = { path: file.path, format, title: this.book.title ?? file.basename, author: this.book.author, hub: this.book.hub };
 		this.buildUi();
 		this.setLocLabel("Opening…");
 		try {
@@ -245,7 +245,7 @@ export class ReaderView extends FileView {
 	/** Open a book straight from its bytes (used by the preview and self-test). */
 	async openData(path: string, format: "pdf" | "epub", data: ArrayBuffer) {
 		this.book = this.host.store.get(path, format);
-		this.meta = { path, format, title: this.book.title ?? path.split("/").pop()!.replace(/\.\w+$/, ""), author: this.book.author };
+		this.meta = { path, format, title: this.book.title ?? path.split("/").pop()!.replace(/\.\w+$/, ""), author: this.book.author, hub: this.book.hub };
 		this.buildUi();
 		if (format === "pdf") await this.openPdf(data);
 		else await this.openEpub(data);

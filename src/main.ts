@@ -1,13 +1,16 @@
-import { Notice, Platform, Plugin, TAbstractFile, TFile, TFolder, WorkspaceLeaf, addIcon, loadPdfJs, normalizePath, requestUrl } from "obsidian";
+import { MarkdownRenderChild, Notice, Platform, Plugin, TAbstractFile, TFile, TFolder, WorkspaceLeaf, addIcon, loadPdfJs, normalizePath, requestUrl } from "obsidian";
 import { LOGO_ICON_ID, LOGO_ICON_SVG } from "./logo";
 import { DEFAULT_SCHEMA_FOLDER, TYPED_GRAPH_GRAPH_COMMAND, TYPED_GRAPH_ID, TypedState } from "./typed";
-import { AiClient, ApiJson, ChatMessage, HandoffNeeded } from "./ai";
+import { AiClient, ApiJson, CHAT_APPS, ChatMessage, HandoffNeeded } from "./ai";
 import { desktopCliAvailable, runCli } from "./cliRunner";
 import { svgToStrokes } from "./ink";
 import { DeckStore } from "./decks";
 import { DecksView, StudyModal, VIEW_TYPE_DECKS } from "./decksView";
-import { LibraryView, VIEW_TYPE_LIBRARY } from "./libraryView";
-import { HandwritingModal } from "./modals";
+import {
+	LibraryBook, Suggestion, SuggestionStore, Status, buildLibrarianSystem, buildSuggestPrompt, collectBooks, parseShelfBlock, parseSuggestions, shelf,
+} from "./library";
+import { AddBookModal, BookFileModal, LibraryView, ShelfActions, ShelfContext, VIEW_TYPE_LIBRARY, renderShelfBlock, vaultBookFiles } from "./libraryView";
+import { HandwritingModal, TextPromptModal } from "./modals";
 import { BookNotes, NotesHost } from "./notes";
 import { ReaderHost, ReaderView, VIEW_TYPE_READER } from "./readerView";
 import { BookCompanionSettingTab, BookCompanionSettings, mergeSettings } from "./settings";
@@ -27,18 +30,22 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 	settings!: BookCompanionSettings;
 	store!: BookStore;
 	decks!: DeckStore;
+	suggestions!: SuggestionStore;
+	private shelfListeners = new Set<() => void>();
 	notes!: BookNotes;
 	ai!: AiClient;
 	private pdfOverridden = false;
 
 	async onload() {
-		const raw = ((await this.loadData()) ?? {}) as { settings?: unknown; books?: unknown; decks?: unknown };
+		const raw = ((await this.loadData()) ?? {}) as { settings?: unknown; books?: unknown; decks?: unknown; library?: { items?: Suggestion[]; dismissed?: string[] } };
 		this.settings = mergeSettings(raw.settings);
 		this.store = new BookStore(() => this.persist());
 		this.store.load(raw.books);
 		this.decks = new DeckStore(() => this.persist());
 		this.decks.load(raw.decks);
 		if (this.decks.importLegacy(this.store.books)) this.store.saveSoon();
+		this.suggestions = new SuggestionStore(() => this.persist());
+		this.suggestions.load(raw.library);
 		this.notes = new BookNotes(this.vaultHost(), () => this.settings.notes, () => this.typedState());
 		addIcon(LOGO_ICON_ID, LOGO_ICON_SVG);
 		this.ai = new AiClient(() => this.settings.ai, async (req) => {
@@ -60,6 +67,18 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 		} catch (e) {
 			console.warn("Book Companion: another plugin already opens .epub files; use \"Open in Book Reader\" from the file menu.", e);
 		}
+
+		this.registerMarkdownCodeBlockProcessor("book-shelf", (source, el, ctx) => {
+			const block = parseShelfBlock(source);
+			const draw = () => { el.empty(); renderShelfBlock(el, block, this.shelfContext()); };
+			draw();
+			const child = new MarkdownRenderChild(el);
+			const again = () => { if (el.isConnected) draw(); };
+			child.registerEvent(this.app.metadataCache.on("changed", () => window.setTimeout(again, 400)));
+			this.shelfListeners.add(again);
+			child.register(() => this.shelfListeners.delete(again));
+			ctx.addChild(child);
+		});
 
 		this.addSettingTab(new BookCompanionSettingTab(this.app, this));
 		this.addRibbonIcon(LOGO_ICON_ID, "Book library", () => void this.openLibrary());
@@ -95,13 +114,14 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 	onunload() {
 		void this.store.flush();
 		void this.decks.flush();
+		void this.suggestions.flush();
 		this.restorePdf();
 	}
 
 	// ---------- data ----------
 
 	async persist() {
-		await this.saveData({ settings: this.settings, books: this.store.books, decks: this.decks.toJSON() });
+		await this.saveData({ settings: this.settings, books: this.store.books, decks: this.decks.toJSON(), library: this.suggestions.toJSON() });
 	}
 
 	async saveSettings() {
@@ -238,9 +258,137 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 		const format = formatOf(file.extension);
 		if (!format) return;
 		const data = this.store.get(file.path, format);
-		const meta: BookMeta = { path: file.path, format, title: data.title ?? file.basename, author: data.author };
+		const meta: BookMeta = { path: file.path, format, title: data.title ?? file.basename, author: data.author, hub: data.hub };
 		const path = await this.notes.ensureHub(meta);
 		this.openNote(path);
+	}
+
+	// ---------- the library: shelves, book pages and the librarian ----------
+
+	/** Every book on the shelves, read from the book pages in the vault (and the book files that have no page yet). */
+	libraryBooks(): LibraryBook[] {
+		const root = normalizePath(this.settings.notes.rootFolder || "Books") + "/";
+		const hubs = this.app.vault.getMarkdownFiles()
+			.filter((f) => f.path.startsWith(root))
+			.map((f) => ({ path: f.path, fm: (this.app.metadataCache.getFileCache(f)?.frontmatter ?? {}) }));
+		const files = vaultBookFiles(this.app).map((f) => {
+			const d = this.store.peek(f.path);
+			return { path: f.path, extension: f.extension, basename: f.basename, title: d?.title, author: d?.author, progress: d?.progress, lastOpened: d?.lastOpened };
+		});
+		return collectBooks(hubs, files);
+	}
+
+	shelfContext(): ShelfContext {
+		return { books: this.libraryBooks(), suggestions: this.suggestions.items, goal: this.settings.library.yearlyGoal, actions: this.shelfActions };
+	}
+
+	/** Redraw the library and every shelf block that is open. */
+	refreshShelves() {
+		for (const l of this.app.workspace.getLeavesOfType(VIEW_TYPE_LIBRARY)) (l.view as LibraryView).render();
+		for (const f of [...this.shelfListeners]) f();
+	}
+
+	/** The book's page, made on the spot for a book file that hasn't got one yet. */
+	private async hubFor(b: LibraryBook): Promise<string | null> {
+		if (b.hub) return b.hub;
+		const f = b.file ? this.app.vault.getAbstractFileByPath(b.file) : null;
+		const format = f instanceof TFile ? formatOf(f.extension) : null;
+		if (!(f instanceof TFile) || !format) return null;
+		const data = this.store.get(f.path, format);
+		return this.notes.ensureHub({ path: f.path, format, title: data.title ?? f.basename, author: data.author, hub: data.hub });
+	}
+
+	shelfActions: ShelfActions = {
+		open: (b) => {
+			if (b.file) void this.openBookPath(b.file);
+			else if (b.hub) this.openNote(b.hub);
+		},
+		openPage: (b) => void this.hubFor(b).then((p) => { if (p) this.openNote(p); }),
+		setStatus: async (b, s) => {
+			const hub = await this.hubFor(b);
+			if (!hub) return;
+			await this.notes.setStatus(hub, s);
+			window.setTimeout(() => this.refreshShelves(), 500);
+		},
+		setRating: async (b, n) => {
+			const hub = await this.hubFor(b);
+			if (!hub) return;
+			await this.notes.setHubFields(hub, { rating: n || "" });
+			window.setTimeout(() => this.refreshShelves(), 500);
+		},
+		linkFile: (b) => {
+			if (!b.hub) return;
+			new BookFileModal(this.app, vaultBookFiles(this.app), (f) => {
+				const format = formatOf(f.extension);
+				if (!format || !b.hub) return;
+				void this.notes.linkFile(b.hub, f.path, format).then(() => {
+					this.store.get(f.path, format).hub = b.hub;
+					this.store.saveSoon();
+					new Notice(`Linked ${f.name} to ${b.title}`);
+					window.setTimeout(() => this.refreshShelves(), 500);
+				});
+			}).open();
+		},
+		shelveSuggestion: async (s, status) => {
+			await this.notes.createShelfBook({ title: s.title, author: s.author, status, why: s.why });
+			this.suggestions.take(s.id);
+			new Notice(`${s.title} is on your ${status === "wishlist" ? "wishlist" : "Up next shelf"}`);
+			window.setTimeout(() => this.refreshShelves(), 500);
+		},
+		dismissSuggestion: (s) => {
+			this.suggestions.take(s.id, true);
+			this.refreshShelves();
+		},
+	};
+
+	addBookDialog(defaults?: { status?: Status; title?: string; author?: string; why?: string }) {
+		new AddBookModal(this.app, (b) => {
+			void this.notes.createShelfBook(b).then((path) => {
+				new Notice(`Added ${b.title}`);
+				window.setTimeout(() => this.refreshShelves(), 500);
+				this.openNote(path);
+			});
+		}, defaults).open();
+	}
+
+	/** Ask the librarian cat what to read next, from what's on your shelves. */
+	async askLibrarian(focus = ""): Promise<number> {
+		const books = this.libraryBooks();
+		const prompt = buildSuggestPrompt(books, this.settings.learner, {
+			count: this.settings.library.suggestionCount, focus, dismissed: this.suggestions.dismissed, pending: this.suggestions.items.map((s) => s.title),
+		});
+		const take = (answer: string): number => {
+			const parsed = parseSuggestions(answer);
+			const added = this.suggestions.add(parsed, books.map((b) => b.title), focus);
+			new Notice(added.length ? `The librarian has ${added.length} new suggestion${added.length > 1 ? "s" : ""}` : parsed.length ? "Nothing new: you have all of these, or waved them away." : "The librarian's answer wasn't in the expected form. Try again.", 6000);
+			this.refreshShelves();
+			return added.length;
+		};
+		try {
+			return take(await this.ai.chat(buildLibrarianSystem(this.settings.learner), [{ role: "user", content: prompt }]));
+		} catch (e) {
+			if (e instanceof HandoffNeeded) {
+				const app = CHAT_APPS[this.settings.ai.chatApp] ?? CHAT_APPS.claude;
+				void navigator.clipboard?.writeText(e.prompt).catch(() => {});
+				window.open(app.url(e.prompt.length > 6000 ? e.prompt.slice(0, 6000) : e.prompt));
+				new TextPromptModal(this.app, "Paste the librarian's answer", "Paste the chat app's answer here…", (t) => { take(t); }, true).open();
+				return 0;
+			}
+			new Notice(e instanceof Error ? e.message : String(e), 8000);
+			return 0;
+		}
+	}
+
+	async openLibraryPages() {
+		await this.notes.ensureLibraryPages();
+		const f = this.app.vault.getAbstractFileByPath(normalizePath(`${this.notes.libraryFolder()}/Library.md`));
+		if (f instanceof TFile) await this.app.workspace.getLeaf("tab").openFile(f);
+	}
+
+	continueReading() {
+		const b = shelf(this.libraryBooks(), "reading", { sort: "recent" }).find((x) => x.file);
+		if (b?.file) void this.openBookPath(b.file);
+		else new Notice("Nothing in progress. Open a book from your library.");
 	}
 
 	async openLibrary() {
@@ -310,6 +458,10 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 
 	private addCommands() {
 		this.addCommand({ id: "open-library", name: "Open book library", callback: () => void this.openLibrary() });
+		this.addCommand({ id: "continue-reading", name: "Continue reading", callback: () => this.continueReading() });
+		this.addCommand({ id: "add-book", name: "Add a book to the library", callback: () => this.addBookDialog() });
+		this.addCommand({ id: "suggest-books", name: "Ask the librarian for books to read", callback: () => void this.openLibrary().then(() => this.askLibrarian()) });
+		this.addCommand({ id: "library-pages", name: "Open the library pages", callback: () => void this.openLibraryPages() });
 		this.addCommand({ id: "open-flashcards", name: "Open flashcard decks", callback: () => void this.openDecks() });
 		this.addCommand({ id: "study-flashcards", name: "Study flashcards that are due", callback: () => this.studyDue() });
 		this.addCommand({

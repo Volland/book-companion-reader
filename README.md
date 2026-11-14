@@ -54,6 +54,24 @@ You can also **Study this page** (summary, hard sentences and up to 12 words fro
 - **More than one language?** Add each with its own level, for example *English C1* and *German B1*. A book's language is read from the EPUB, or you pick it in the reader's panel, and every explanation, simplification and word list then uses that language's level.
 - Explanations come in simple words of the language you're learning (more practice) or in your native language. You choose.
 
+### 📚 Your library and the librarian cat
+The 📚 ribbon icon opens a library with shelves, and everything you set there is written to each book's page, so it stays in your vault (and in Typed Graph) as plain notes.
+- **Shelves**: *Reading now*, *Up next*, *Wishlist*, *Finished* and *Set aside*, with progress bars, a **Continue reading** button and a status chip on every book (tap it to move the book).
+- **Books without a file too**: **Add book** puts a paper book, an audiobook or a title a friend mentioned on the shelves, with author, genres and *why you want to read it*. Later you can **link a PDF or EPUB** to it, and it stays one book. Book files you drop into the vault show up by themselves.
+- **Rate and date**: rate finished books with stars; start and finish dates are filled in for you. Opening a book from Up next or the wishlist starts it.
+- **Reading goal**: set how many books you want to finish this year in the settings and watch the bar fill.
+- **Suggested to read**: ask the **librarian cat** for books. It looks at what you finished (best rated first), what you're reading and what you want, skips what you waved away, and can focus on *something shorter*, *more by authors I like*, *easier to read for my level* (it knows your language level) or anything you type. Put a suggestion on **Up next** or the **Wishlist**, or say **Not for me** and it won't come back.
+- **Library pages**: *Library pages* creates **Library**, **Currently reading**, **Up next**, **Wishlist**, **Suggested reading**, **Finished** and **Reading log** notes in `Books/Library/`. They are made of live `book-shelf` blocks, so they update by themselves, and you can put the same blocks in any note:
+
+````markdown
+```book-shelf
+shelf: reading
+```
+````
+
+Options: `shelf:` (`reading`, `to-read`, `wishlist`, `finished`, `abandoned`, `suggested`, `all`), `view:` (`cards`, `list`, `stats`), `limit:`, `sort:` (`recent`, `title`, `rating`, `finished`, `author`), `year:` and `author:`. Each author also gets a note listing their books.
+- **With Typed Graph**: books are `Book` notes with `status`, `rating`, `started`, `finished`, `written_by` and `has_genre`, so you can ask your library anything, for example which authors you've read most; the Reading log page includes ready-made queries.
+
 ### 🐱 Chat with the cat
 Open the **Cat** tab in the reader panel and talk about the book with the little reading cat, like a book-club friend who is reading along.
 - Ask anything: *What is happening on this page? Summarise what I've read so far. Quiz me on this chapter. What does the author mean here?*
@@ -73,7 +91,7 @@ Open the **Cat** tab in the reader panel and talk about the book with the little
 
 ### 🗂️ A small system around every book
 Each book gets a folder (default `Books/<Title>/`) containing:
-- a **book page** with title, author, status, progress, start and last-read dates, and sections for *Highlights, Notes, Handwriting, Vocabulary, AI explanations, Discussions*
+- a **book page** with title, author, status, progress, start and last-read dates, and sections for *Highlights, Notes, Handwriting, Vocabulary, AI explanations, Discussions* and your reading status, rating and dates
 - `Chats/`: your discussions with the cat, one note each
 - `Notes/`: one note per thought, with the quote and a link back to the exact spot
 - `Handwriting/`: your handwritten pages as SVG
@@ -146,7 +164,7 @@ These notes are checked against Typed Graph's own engine: the test vault reads b
 - Open any `.epub`. For PDFs, use the file menu → **Open in Book Reader**, or turn on *Open PDFs in this reader*.
 - Select text and pick an action from the toolbar. Tap a highlight to explain it, add a note, recolour or remove it.
 - Toolbar: contents · previous/next · position · text and layout (EPUB) or zoom and ✏️ write on the page (PDF) · handwritten note · study this page · book page · companion panel.
-- Commands (assign your own hotkeys): explain, simplify or define the selection, chat with the cat, discuss the selection with the cat, make a flashcard, open flashcard decks, study flashcards that are due, highlight, new note, handwritten note, write on page, study this page, toggle panel, book page, show in Typed Graph, add book types to Typed Graph schema, next/previous page, contents, open library.
+- Commands (assign your own hotkeys): explain, simplify or define the selection, continue reading, add a book, ask the librarian, open the library pages, chat with the cat, discuss the selection with the cat, make a flashcard, open flashcard decks, study flashcards that are due, highlight, new note, handwritten note, write on page, study this page, toggle panel, book page, show in Typed Graph, add book types to Typed Graph schema, next/previous page, contents, open library.
 
 ## Disclosures
 

@@ -8,6 +8,8 @@ import { DeckStore } from "../src/decks";
 import { MemoryVault, fakeAi, sampleEpub } from "../test/sample";
 import { HandoffNeeded } from "../src/ai";
 import { DecksView, renderStudy } from "../src/decksView";
+import { LibraryBook, SuggestionStore, collectBooks } from "../src/library";
+import { LibraryView, renderShelfBlock } from "../src/libraryView";
 
 const g: any = globalThis;
 g.__mockApp = { vault: {}, workspace: {} };
@@ -67,7 +69,49 @@ async function flash() {
 	document.body.dataset.ready = "1";
 }
 
+/** #library: the librarian's desk on the desktop and a library page with shelf blocks on the phone. */
+async function library() {
+	const settings = mergeSettings({ library: { yearlyGoal: 12 } });
+	const y = new Date().getFullYear();
+	const hub = (title: string, author: string, status: string, extra: Record<string, unknown> = {}) => ({ path: `Books/${title}/${title}.md`, fm: { type: "Book", title, author, status, progress: 0, tags: ["book"], ...extra } });
+	const hubs = [
+		hub("The Keeper of Gull Point", "A. Sample", "reading", { progress: 42, file: "[[Library/Keeper.epub]]", file_format: "epub" }),
+		hub("Der Leuchtturm", "Anna Meier", "reading", { progress: 8, file: "[[Library/Leuchtturm.epub]]", file_format: "epub" }),
+		hub("Dune", "Frank Herbert", "to-read", { format: "paper", why: "A friend said it changed how they read." }),
+		hub("Emma", "Jane Austen", "to-read", { format: "ebook" }),
+		hub("Piranesi", "Susanna Clarke", "wishlist", { format: "paper" }),
+		hub("The Left Hand of Darkness", "Ursula K. Le Guin", "finished", { rating: 5, finished: `${y}-03-14`, pages: 304, tags: ["book", "genre/science-fiction"] }),
+		hub("A Wizard of Earthsea", "Ursula K. Le Guin", "finished", { rating: 4, finished: `${y}-05-02`, pages: 183, tags: ["book", "genre/fantasy"] }),
+		hub("Kindred", "Octavia E. Butler", "finished", { rating: 5, finished: `${y}-06-20`, pages: 264, tags: ["book", "genre/science-fiction"] }),
+	];
+	const books: LibraryBook[] = collectBooks(hubs, [{ path: "Library/Keeper.epub", extension: "epub", basename: "Keeper", lastOpened: Date.now() }, { path: "Library/Leuchtturm.epub", extension: "epub", basename: "Leuchtturm", lastOpened: Date.now() - 86400000 }]);
+	const sug = new SuggestionStore(async () => {});
+	sug.add([
+		{ title: "Earthsea: The Tombs of Atuan", author: "Ursula K. Le Guin", why: "More Earthsea, since you rated A Wizard of Earthsea 4 stars." },
+		{ title: "Parable of the Sower", author: "Octavia E. Butler", why: "Butler again, after Kindred." },
+		{ title: "Solaris", author: "Stanisław Lem", why: "Thoughtful science fiction like The Left Hand of Darkness, and short." },
+	], []);
+	const noop = async () => {};
+	const actions: any = { open: noop, openPage: noop, setStatus: noop, setRating: noop, linkFile: noop, shelveSuggestion: noop, dismissSuggestion: noop };
+	const plugin: any = { settings, suggestions: sug, shelfActions: actions, libraryBooks: () => books, addBookDialog: noop, openLibraryPages: noop, askLibrarian: noop };
+	const desk = new LibraryView({} as any, plugin);
+	document.getElementById("desktop")!.appendChild(desk.containerEl);
+	(desk as any).tab = location.search.includes("finished") ? "finished" : "suggested";
+	desk.render();
+	const page = document.createElement("div");
+	page.style.cssText = "padding:14px;width:100%;box-sizing:border-box;overflow:auto;background:var(--background-primary)";
+	document.getElementById("phone")!.appendChild(page);
+	const ctx = { books, suggestions: sug.items, goal: 12, actions };
+	page.createEl("h3", { text: "📚 Library" });
+	page.createEl("h4", { text: "Currently reading" });
+	renderShelfBlock(page.createDiv(), { shelf: "reading", view: "cards" }, ctx);
+	page.createEl("h4", { text: "This year" });
+	renderShelfBlock(page.createDiv(), { shelf: "all", view: "stats" }, ctx);
+	document.body.dataset.ready = "1";
+}
+
 async function main() {
+	if (location.hash === "#library") return library();
 	if (location.hash === "#flash") return flash();
 	const desk = await mount(document.getElementById("desktop")!, { phone: false });
 	const phone = await mount(document.getElementById("phone")!, { phone: true, handoff: true });

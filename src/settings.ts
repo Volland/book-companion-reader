@@ -34,6 +34,13 @@ export interface CardSettings {
 	sessionSize: number;
 }
 
+export interface LibrarySettings {
+	/** Books to finish this year (0 = no goal). */
+	yearlyGoal: number;
+	/** How many books the librarian suggests at a time. */
+	suggestionCount: number;
+}
+
 export interface NotesSettings {
 	rootFolder: string;
 	highlightsToBookPage: boolean;
@@ -65,6 +72,7 @@ export interface BookCompanionSettings {
 	ai: AiSettings;
 	learner: LearnerSettings;
 	cards: CardSettings;
+	library: LibrarySettings;
 	notes: NotesSettings;
 	reader: ReaderSettings;
 	ink: InkSettings;
@@ -111,6 +119,10 @@ export const DEFAULT_SETTINGS: BookCompanionSettings = {
 	},
 	cards: {
 		sessionSize: 20,
+	},
+	library: {
+		yearlyGoal: 0,
+		suggestionCount: 5,
 	},
 	notes: {
 		rootFolder: "Books",
@@ -263,6 +275,20 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 			.setName("Cards per study session")
 			.setDesc("Words you save from a book become flashcards in that book's deck. Make topic decks in the Flashcards view to group words your own way.")
 			.addSlider((sl) => sl.setLimits(5, 100, 5).setValue(s.cards.sessionSize).onChange(async (v) => { s.cards.sessionSize = v; await save(); }));
+
+		new Setting(containerEl).setName("Library").setHeading();
+		new Setting(containerEl)
+			.setName("Books to read this year")
+			.setDesc("Your reading goal. Leave 0 for none. Progress shows in the library and on the library pages.")
+			.addText((t) => t.setValue(String(s.library.yearlyGoal)).onChange(async (v) => { s.library.yearlyGoal = Math.max(0, parseInt(v, 10) || 0); await save(); }));
+		new Setting(containerEl)
+			.setName("Suggestions at a time")
+			.setDesc("How many books the librarian cat suggests when you ask.")
+			.addSlider((sl) => sl.setLimits(3, 10, 1).setValue(s.library.suggestionCount).onChange(async (v) => { s.library.suggestionCount = v; await save(); }));
+		new Setting(containerEl)
+			.setName("Library pages")
+			.setDesc("Creates Currently reading, Up next, Wishlist, Suggested reading, Finished and Reading log pages in the Library folder inside your books folder. Existing pages are never changed.")
+			.addButton((b) => b.setButtonText("Create pages").onClick(() => void this.plugin.openLibraryPages()));
 
 		new Setting(containerEl).setName("Notes in your vault").setHeading();
 		new Setting(containerEl)
