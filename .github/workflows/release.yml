@@ -1,0 +1,37 @@
+name: Release plugin
+
+# Runs when a version tag (e.g. 0.1.0, no "v") is pushed: builds, self-tests and attaches
+# main.js, manifest.json and styles.css to a GitHub release, which is what Obsidian installs from.
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node test/out/selftest.js --self-test selftest.json
+      - name: Tag must match manifest.json
+        run: |
+          v=$(node -p "require('./manifest.json').version")
+          if [ "$v" != "${GITHUB_REF_NAME}" ]; then echo "Tag ${GITHUB_REF_NAME} != manifest version $v"; exit 1; fi
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            main.js
+            manifest.json
+            styles.css

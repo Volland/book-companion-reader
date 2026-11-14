@@ -1,0 +1,11 @@
+[package]
+name = "book-companion"
+version = "0.1.0"
+edition = "2021"
+description = "Launcher for the Book Companion Reader Obsidian plugin: preview, self-test and install into a vault."
+
+[[bin]]
+name = "book-companion"
+path = "src/main.rs"
+
+[dependencies]

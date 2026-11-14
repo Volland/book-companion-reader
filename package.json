@@ -1,0 +1,30 @@
+{
+  "name": "book-companion-reader",
+  "version": "0.1.0",
+  "description": "Obsidian plugin: PDF & EPUB reader with AI explanations, language learning, linked notes and handwriting.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production && node esbuild.config.mjs preview && node esbuild.config.mjs test",
+    "preview:pdf": "node esbuild.config.mjs pdf-preview",
+    "selftest": "node esbuild.config.mjs test && node test/out/selftest.js --self-test selftest.json",
+    "version:bump": "node scripts/version-bump.mjs"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "linkedom": "^0.18.15",
+    "obsidian": "^1.14.4",
+    "pdfjs-dist": "^6.5.438",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3"
+  },
+  "author": "Volodymyr Pavlyshyn",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Volland/book-companion-reader"
+  }
+}

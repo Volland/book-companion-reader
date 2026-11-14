@@ -1,0 +1,291 @@
+{
+  "version": 1,
+  "values": [
+    {
+      "name": "runs on mobile",
+      "group": "platform",
+      "value": true,
+      "source": "manifest.json isDesktopOnly false"
+    },
+    {
+      "name": "minimum Obsidian version",
+      "group": "platform",
+      "value": "1.5.0",
+      "estimated": true
+    },
+    {
+      "name": "EPUB layout default",
+      "group": "reading",
+      "value": "paged",
+      "estimated": true
+    },
+    {
+      "name": "text size default",
+      "group": "reading",
+      "value": 18,
+      "unit": "px",
+      "estimated": true
+    },
+    {
+      "name": "text size step",
+      "group": "reading",
+      "value": 2,
+      "unit": "px",
+      "estimated": true
+    },
+    {
+      "name": "line height",
+      "group": "reading",
+      "value": 1.6,
+      "estimated": true
+    },
+    {
+      "name": "max column width",
+      "group": "reading",
+      "value": 720,
+      "unit": "px",
+      "estimated": true
+    },
+    {
+      "name": "column gap",
+      "group": "reading",
+      "value": 48,
+      "unit": "px",
+      "estimated": true
+    },
+    {
+      "name": "tap zone width",
+      "group": "controls",
+      "value": 0.22,
+      "unit": "fraction of page",
+      "estimated": true
+    },
+    {
+      "name": "swipe distance",
+      "group": "controls",
+      "value": 60,
+      "unit": "px",
+      "estimated": true
+    },
+    {
+      "name": "swipe time limit",
+      "group": "controls",
+      "value": 600,
+      "unit": "ms",
+      "estimated": true
+    },
+    {
+      "name": "next page keys",
+      "group": "controls",
+      "value": "ArrowRight, PageDown, Space",
+      "source": "src/readerView.ts onKey"
+    },
+    {
+      "name": "previous page keys",
+      "group": "controls",
+      "value": "ArrowLeft, PageUp",
+      "source": "src/readerView.ts onKey"
+    },
+    {
+      "name": "PDF zoom step",
+      "group": "reading",
+      "value": 1.15,
+      "estimated": true
+    },
+    {
+      "name": "PDF zoom min",
+      "group": "reading",
+      "value": 0.5,
+      "estimated": true
+    },
+    {
+      "name": "PDF zoom max",
+      "group": "reading",
+      "value": 4,
+      "estimated": true
+    },
+    {
+      "name": "PDF pages kept drawn",
+      "group": "reading",
+      "value": 10,
+      "estimated": true
+    },
+    {
+      "name": "PDF canvas cap",
+      "group": "reading",
+      "value": 12,
+      "unit": "megapixels",
+      "estimated": true
+    },
+    {
+      "name": "progress note update delay",
+      "group": "notes",
+      "value": 8,
+      "unit": "s",
+      "estimated": true
+    },
+    {
+      "name": "finished threshold",
+      "group": "notes",
+      "value": 0.99,
+      "estimated": true
+    },
+    {
+      "name": "default AI service",
+      "group": "ai",
+      "value": "Claude subscription via Claude Code",
+      "estimated": true
+    },
+    {
+      "name": "subscription app time limit",
+      "group": "ai",
+      "value": 120,
+      "unit": "s",
+      "estimated": true
+    },
+    {
+      "name": "phone hand-off link cap",
+      "group": "ai",
+      "value": 6000,
+      "unit": "characters",
+      "estimated": true
+    },
+    {
+      "name": "temperature",
+      "group": "ai",
+      "value": 0.3,
+      "estimated": true
+    },
+    {
+      "name": "max answer tokens",
+      "group": "ai",
+      "value": 1200,
+      "estimated": true
+    },
+    {
+      "name": "selection context",
+      "group": "ai",
+      "value": 2500,
+      "unit": "characters",
+      "estimated": true
+    },
+    {
+      "name": "study page text cap",
+      "group": "ai",
+      "value": 6000,
+      "unit": "characters",
+      "estimated": true
+    },
+    {
+      "name": "answers kept per book",
+      "group": "ai",
+      "value": 60,
+      "estimated": true
+    },
+    {
+      "name": "learner level default",
+      "group": "learning",
+      "value": "B1",
+      "estimated": true
+    },
+    {
+      "name": "words per simplification",
+      "group": "learning",
+      "value": 10,
+      "estimated": true
+    },
+    {
+      "name": "word button max words",
+      "group": "learning",
+      "value": 4,
+      "estimated": true
+    },
+    {
+      "name": "quiz cards per round",
+      "group": "learning",
+      "value": 15,
+      "estimated": true
+    },
+    {
+      "name": "quiz boxes",
+      "group": "learning",
+      "value": 5,
+      "estimated": true
+    },
+    {
+      "name": "books folder",
+      "group": "notes",
+      "value": "Books",
+      "estimated": true
+    },
+    {
+      "name": "highlight colours",
+      "group": "notes",
+      "value": "yellow, green, blue, pink, orange",
+      "estimated": true
+    },
+    {
+      "name": "pen width",
+      "group": "handwriting",
+      "value": 2.5,
+      "unit": "px at 800 px",
+      "estimated": true
+    },
+    {
+      "name": "pressure width range",
+      "group": "handwriting",
+      "value": "0.55-1.45x",
+      "estimated": true
+    },
+    {
+      "name": "highlighter width",
+      "group": "handwriting",
+      "value": 6,
+      "unit": "x pen",
+      "estimated": true
+    },
+    {
+      "name": "highlighter opacity",
+      "group": "handwriting",
+      "value": 0.35,
+      "estimated": true
+    },
+    {
+      "name": "eraser radius",
+      "group": "handwriting",
+      "value": 14,
+      "unit": "px at 800 px",
+      "estimated": true
+    },
+    {
+      "name": "handwriting sheet aspect",
+      "group": "handwriting",
+      "value": 1.3,
+      "estimated": true
+    },
+    {
+      "name": "pen only default",
+      "group": "handwriting",
+      "value": false,
+      "estimated": true
+    },
+    {
+      "name": "typed notes default",
+      "group": "typed-graph",
+      "value": "auto (on when Typed Graph is enabled)",
+      "source": "src/settings.ts typedNotes"
+    },
+    {
+      "name": "typed schema folder default",
+      "group": "typed-graph",
+      "value": "Types",
+      "source": "Typed Graph README (default Types/)"
+    },
+    {
+      "name": "typed edge types written",
+      "group": "typed-graph",
+      "value": 5,
+      "source": "src/typed.ts, verified with Typed Graph core engine"
+    }
+  ]
+}

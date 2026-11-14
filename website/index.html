@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book Companion Reader — read, understand and remember books in Obsidian</title>
+<meta name="description" content="An Obsidian plugin for PDF and EPUB books on desktop and mobile. Select text and let AI explain or simplify it for your language level. Highlights, notes, vocabulary and handwriting stay linked to each book.">
+<meta property="og:title" content="Book Companion Reader for Obsidian">
+<meta property="og:description" content="Read PDFs and EPUBs in Obsidian. AI explains what you select at your language level; notes, words and handwriting stay linked to the book.">
+<meta property="og:image" content="assets/screenshots/reader.png">
+<meta name="theme-color" content="#5b21b6">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="nav">
+	<a class="brand" href="#top"><img src="assets/logo.svg" alt="" width="32" height="32"> Book Companion Reader</a>
+	<nav>
+		<a href="#features">Features</a>
+		<a href="#learn">Language learning</a>
+		<a href="#typed-graph">Typed Graph</a>
+		<a href="#install">Install</a>
+		<a class="gh" href="https://github.com/Volland/book-companion-reader">GitHub</a>
+	</nav>
+</header>
+
+<main id="top">
+	<section class="hero">
+		<div class="hero-text">
+			<p class="eyebrow">Obsidian plugin · desktop &amp; mobile · free &amp; open source</p>
+			<h1>Read your books in Obsidian.<br><span>Understand every sentence.</span></h1>
+			<p class="lead">A PDF and EPUB reader for Obsidian with an AI companion, like the one on an e-reader but tuned to <em>your</em> language level. Select a word or a sentence to have it explained or rewritten in simpler words. Your highlights, notes, vocabulary and handwriting become a small knowledge system around each book, right in your vault.</p>
+			<div class="cta">
+				<a class="btn primary" href="obsidian://show-plugin?id=book-companion-reader">Install in Obsidian</a>
+				<a class="btn" href="https://github.com/Volland/book-companion-reader/releases/latest">Download</a>
+				<a class="btn ghost" href="#features">See what it does ↓</a>
+			</div>
+			<p class="small">Works with the AI subscription you already have: Claude, ChatGPT or Gemini. API keys and local models work too.</p>
+		</div>
+		<div class="hero-logo"><img src="assets/logo.svg" alt="Book Companion Reader logo" width="220" height="220"></div>
+	</section>
+
+	<figure class="shot">
+		<img src="assets/screenshots/reader.png" alt="The reader on a computer with the AI panel open, and on a phone with the answer sheet" width="1500" height="900">
+		<figcaption>Desktop: select text and Explain, Simplify, Translate, highlight or take a note. Phone: the same reader, with answers in a bottom sheet.</figcaption>
+	</figure>
+
+	<section id="features" class="section">
+		<h2>Everything a reading companion should do</h2>
+		<div class="grid">
+			<article class="card">
+				<div class="icon">📖</div>
+				<h3>PDF and EPUB, one reader</h3>
+				<p>EPUBs turn like pages (tap the edges or swipe) or scroll. PDFs have selectable text, zoom and an outline. Sepia and dark paper, font size, and your place is always remembered.</p>
+			</article>
+			<article class="card">
+				<div class="icon">✨</div>
+				<h3>Explain what you select</h3>
+				<p>Explain, Simplify, Word meaning, Translate or ask your own question about any passage. The AI sees the surrounding text, so answers fit the book. Ask follow-up questions in the same thread.</p>
+			</article>
+			<article class="card">
+				<div class="icon">🎓</div>
+				<h3>Written for your level</h3>
+				<p>Tell it your native language, the language you're learning and your level, A1 to C2. Hard sentences get simpler versions, and difficult words get short definitions and translations.</p>
+			</article>
+			<article class="card">
+				<div class="icon">🗂️</div>
+				<h3>A small system around each book</h3>
+				<p>Each book gets a folder and a <strong>book page</strong> listing its highlights, notes, handwriting, vocabulary and saved AI answers. Every entry links back to the exact page.</p>
+			</article>
+			<article class="card">
+				<div class="icon">✍️</div>
+				<h3>Handwriting</h3>
+				<p>Write straight on PDF pages with a pen, highlighter and eraser, or start a handwritten note on lined or dotted paper. Notes are saved as SVG you can open and edit later. Supports Apple Pencil and other styluses, with a pen-only mode that ignores your palm.</p>
+			</article>
+			<article class="card">
+				<div class="icon">📱</div>
+				<h3>Same on phone and desktop</h3>
+				<p>Built for Obsidian mobile from the start: big touch targets, swipe page turns, a bottom-sheet companion. Your progress and notes travel with your vault.</p>
+			</article>
+			<article class="card">
+				<div class="icon">🧠</div>
+				<h3>Vocabulary that sticks</h3>
+				<p>Save words from any answer with one tap. They go to a flashcard note (<code>word :: meaning</code>, ready for Spaced Repetition), and a built-in quiz moves each word through five boxes.</p>
+			</article>
+			<article class="card">
+				<div class="icon">📚</div>
+				<h3>Library</h3>
+				<p>All your PDFs and EPUBs on one shelf with generated covers, reading progress, highlight and word counts, and a search box.</p>
+			</article>
+		</div>
+	</section>
+
+	<section id="learn" class="section split">
+		<div>
+			<h2>Learn a language by reading real books</h2>
+			<p>Pick a novel in the language you're learning. When a sentence is too hard, select it and tap <b>Simplify</b>:</p>
+			<ul class="ticks">
+				<li>a simpler rewrite at your level</li>
+				<li>each complex sentence next to an easier version</li>
+				<li>the hard words, each with a short definition and a translation into your language</li>
+			</ul>
+			<p><b>Study this page</b> does the same for everything on screen: a short summary, the hard sentences and up to 12 words to learn. Explanations come in simple words of the language you're learning, or in your native language. You choose.</p>
+		</div>
+		<div class="example">
+			<p class="ex-label">You select</p>
+			<blockquote>Notwithstanding the gales that battered the headland every November, she climbed the hundred and twelve steps each evening…</blockquote>
+			<p class="ex-label">Simplified for B1</p>
+			<p>Even with the strong winds every November, she climbed the 112 steps each evening…</p>
+			<p class="ex-label">Words</p>
+			<p><b>notwithstanding</b>: even though; despite<br><b>gale</b>: a very strong wind<br><b>meticulous</b>: very careful about small details</p>
+		</div>
+	</section>
+
+	<section id="ai" class="section">
+		<h2>Use the AI you already pay for</h2>
+		<div class="grid three">
+			<article class="card">
+				<h3>Your subscription, on a computer</h3>
+				<p><b>Claude Pro/Max</b> through Claude Code, <b>ChatGPT Plus/Pro</b> through Codex, or <b>Gemini</b> through the Gemini CLI. Sign in once in a terminal, and the reader asks through that app. You need no API key and pay no extra bill.</p>
+			</article>
+			<article class="card">
+				<h3>Your chat app, on a phone</h3>
+				<p>Tap <b>Ask Claude</b>, <b>Ask ChatGPT</b> or <b>Ask Gemini</b>. The app opens with your question and the book's context already filled in. Copy the answer and tap <b>Paste answer</b>, and it's saved with the book.</p>
+			</article>
+			<article class="card">
+				<h3>Or any API or local model</h3>
+				<p>Anthropic, OpenAI and OpenRouter keys, Ollama on your own computer, or any OpenAI-compatible server. Requests go only to the service you choose.</p>
+			</article>
+		</div>
+	</section>
+
+	<section id="typed-graph" class="section split reverse">
+		<div>
+			<p class="eyebrow">Better together</p>
+			<h2>Pair it with Typed Graph</h2>
+			<p><a href="https://typedgraph.org/">Typed Graph</a> turns Obsidian notes into a typed property graph that you can query with openCypher. With both plugins installed, the reader writes <b>typed notes</b>:</p>
+			<ul class="ticks">
+				<li>the book page is a <code>Book</code>, <code>written_by</code> its <code>Author</code> (Typed Graph's library ontology)</li>
+				<li>notes from a selection are <code>ReadingNote</code> + <code>Quote</code>, with <code>quoted_from</code> and the page</li>
+				<li>saved AI answers are <code>Explanation</code>s that <code>explains</code> the book, with the action and the place</li>
+				<li>handwriting and vocabulary are typed too, and the schema notes are added for you</li>
+			</ul>
+			<pre><code>MATCH (n)-[r:note_on|explains]-&gt;(b:Book)
+RETURN b.title AS book, count(n) AS notes
+ORDER BY notes DESC</code></pre>
+			<p>Then the graph view shows each book with everything you thought about it. Install <a href="obsidian://show-plugin?id=typed-graph">Typed Graph</a> and typed notes turn on by themselves.</p>
+		</div>
+		<div class="graph">
+			<svg viewBox="0 0 420 360" role="img" aria-label="A book in the graph with its author, quotes, notes, explanation, handwriting and vocabulary">
+				<g stroke="#94a3b8" stroke-width="2" fill="none">
+					<line x1="210" y1="180" x2="210" y2="52"/><line x1="210" y1="180" x2="70" y2="110"/><line x1="210" y1="180" x2="350" y2="110"/>
+					<line x1="210" y1="180" x2="70" y2="270"/><line x1="210" y1="180" x2="350" y2="270"/><line x1="210" y1="180" x2="210" y2="318"/>
+				</g>
+				<g font-size="11" fill="#64748b" font-family="ui-monospace, monospace" text-anchor="middle">
+					<text x="246" y="112">written_by</text><text x="132" y="158">quoted_from</text><text x="292" y="158">explains</text>
+					<text x="128" y="214">note_on</text><text x="300" y="214">vocabulary_of</text><text x="244" y="262">note_on</text>
+				</g>
+				<rect x="150" y="158" width="120" height="44" rx="12" fill="#0ea5e9"/><text x="210" y="185" text-anchor="middle" fill="#fff" font-weight="700">Book</text>
+				<ellipse cx="210" cy="40" rx="56" ry="20" fill="#a855f7"/><text x="210" y="45" text-anchor="middle" fill="#fff">Author</text>
+				<rect x="18" y="90" width="104" height="38" rx="4" fill="#64748b"/><text x="70" y="114" text-anchor="middle" fill="#fff">Quote</text>
+				<path d="M350 88 l52 22 l-52 22 l-52 -22 z" fill="#f59f00"/><text x="350" y="114" text-anchor="middle" fill="#fff">Explanation</text>
+				<rect x="12" y="252" width="116" height="38" rx="12" fill="#7b5cd6"/><text x="70" y="276" text-anchor="middle" fill="#fff">ReadingNote</text>
+				<rect x="294" y="252" width="112" height="38" rx="4" fill="#2f9e44"/><text x="350" y="276" text-anchor="middle" fill="#fff">Vocabulary</text>
+				<rect x="152" y="300" width="116" height="38" rx="12" fill="#1c7ed6"/><text x="210" y="324" text-anchor="middle" fill="#fff">Handwriting</text>
+			</svg>
+		</div>
+	</section>
+
+	<figure class="shot">
+		<img src="assets/screenshots/pdf.png" alt="A PDF page with a highlight, the selection toolbar and the AI panel" width="1500" height="900" loading="lazy">
+		<figcaption>PDFs too: real text selection, highlights that stay where you put them, and the companion beside the page.</figcaption>
+	</figure>
+
+	<section id="install" class="section">
+		<h2>Install</h2>
+		<ol class="steps">
+			<li><b>In Obsidian</b>: Settings → Community plugins → Browse, search for <i>Book Companion Reader</i>, then install and enable it. Or <a href="obsidian://show-plugin?id=book-companion-reader">open it in Obsidian</a>.</li>
+			<li><b>Recommended</b>: also install <a href="obsidian://show-plugin?id=typed-graph">Typed Graph</a> to get typed, queryable reading notes.</li>
+			<li><b>Pick your AI</b>: Settings → Book Companion Reader → AI service. Choose your subscription, a chat app on phones, an API key or Ollama.</li>
+			<li><b>Set your level</b>: your native language, the language you're learning and your level.</li>
+			<li><b>Open a book</b>: click any <code>.epub</code>, or a PDF's menu → <i>Open in Book Reader</i>.</li>
+		</ol>
+		<p class="small">Manual install: copy <code>main.js</code>, <code>manifest.json</code> and <code>styles.css</code> from the <a href="https://github.com/Volland/book-companion-reader/releases/latest">latest release</a> into <code>&lt;vault&gt;/.obsidian/plugins/book-companion-reader/</code>. Beta builds: BRAT → <code>Volland/book-companion-reader</code>.</p>
+	</section>
+
+	<section id="privacy" class="section">
+		<h2>Your books stay yours</h2>
+		<div class="grid three">
+			<article class="card"><h3>Local first</h3><p>Books, positions, highlights and notes stay in your vault and the plugin's settings. Nothing is uploaded on its own.</p></article>
+			<article class="card"><h3>AI only when you ask</h3><p>The selected text and a little surrounding context go to the AI service you picked, and only when you press a button.</p></article>
+			<article class="card"><h3>Open source</h3><p>MIT licensed. The code, the tests and how it all works are on GitHub.</p></article>
+		</div>
+	</section>
+</main>
+
+<footer>
+	<img src="assets/logo.svg" alt="" width="28" height="28">
+	<p>Book Companion Reader · MIT © Volodymyr Pavlyshyn · <a href="https://github.com/Volland/book-companion-reader">GitHub</a> · <a href="https://typedgraph.org/">Typed Graph</a></p>
+	<p class="small">Not affiliated with Obsidian, Anthropic, OpenAI or Google.</p>
+</footer>
+</body>
+</html>

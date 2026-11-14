@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Book Companion Reader logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#4c1d95"/>
+    </linearGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ede9fe"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fde68a"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <!-- open book -->
+  <path d="M128 92 C104 76 72 72 44 78 L44 190 C72 184 104 188 128 204 Z" fill="url(#page)"/>
+  <path d="M128 92 C152 76 184 72 212 78 L212 190 C184 184 152 188 128 204 Z" fill="url(#page)"/>
+  <path d="M128 92 L128 204" stroke="#c4b5fd" stroke-width="4"/>
+  <!-- printed lines on the left page -->
+  <g stroke="#a78bfa" stroke-width="6" stroke-linecap="round">
+    <line x1="62" y1="106" x2="110" y2="112"/>
+    <line x1="62" y1="126" x2="110" y2="132"/>
+    <line x1="62" y1="146" x2="96" y2="150"/>
+  </g>
+  <!-- highlight on the left page -->
+  <rect x="58" y="160" width="54" height="14" rx="4" fill="#fde047" opacity="0.85" transform="rotate(5 85 167)"/>
+  <!-- handwriting on the right page -->
+  <g fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M146 116 c4 -8 7 -8 9 -1 c2 7 5 7 8 0 c3 -7 6 -7 9 0 c2 6 5 6 8 0 c2 -5 5 -5 8 -1"/>
+    <path d="M146 140 c4 -8 7 -8 9 -1 c2 7 5 7 8 0 c3 -7 6 -7 9 0 c2 5 4 5 7 1"/>
+    <path d="M146 164 c4 -8 7 -8 9 -1 c2 7 5 7 8 0 c2 -4 4 -5 6 -3"/>
+  </g>
+  <!-- AI sparkle -->
+  <path d="M178 30 C182 52 188 58 210 62 C188 66 182 72 178 94 C174 72 168 66 146 62 C168 58 174 52 178 30 Z" fill="url(#spark)"/>
+  <path d="M214 92 C216 101 219 104 228 106 C219 108 216 111 214 120 C212 111 209 108 200 106 C209 104 212 101 214 92 Z" fill="#fde68a"/>
+</svg>

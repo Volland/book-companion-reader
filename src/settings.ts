@@ -1,0 +1,294 @@
+import { App, PluginSettingTab, Setting } from "obsidian";
+import type BookCompanionPlugin from "./main";
+
+export type Provider = "claude-sub" | "chatgpt-sub" | "gemini-sub" | "chat-app" | "anthropic" | "openai" | "openrouter" | "ollama" | "custom";
+export type Level = "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | "native";
+
+export interface AiSettings {
+	provider: Provider;
+	apiKey: string;
+	baseUrl: string;
+	model: string;
+	temperature: number;
+	maxTokens: number;
+	/** Full path to the subscription app's command line, when it isn't found by itself. */
+	cliPath: string;
+	/** Which chat app gets the question on phones (or with the "chat app" option). */
+	chatApp: "chatgpt" | "claude" | "gemini";
+}
+
+export interface LearnerSettings {
+	nativeLanguage: string;
+	learningLanguage: string;
+	level: Level;
+	/** Which language explanations are written in. */
+	explainIn: "native" | "learning";
+	extraInstructions: string;
+}
+
+export interface NotesSettings {
+	rootFolder: string;
+	highlightsToBookPage: boolean;
+	flashcardTag: string;
+	/** Write Typed Graph types and edges: "auto" when the Typed Graph plugin is on. */
+	typedNotes: "auto" | "on" | "off";
+	/** Typed Graph schema folder; empty = the one Typed Graph uses. */
+	schemaFolder: string;
+}
+
+export interface ReaderSettings {
+	openPdfInReader: boolean;
+	epubLayout: "paged" | "scroll";
+	fontSize: number;
+	lineHeight: number;
+	fontFamily: "serif" | "sans" | "theme";
+	paper: "theme" | "sepia" | "light" | "dark";
+	defaultHighlight: string;
+}
+
+export interface InkSettings {
+	penOnly: boolean;
+	penColor: string;
+	penWidth: number;
+	paperStyle: "lined" | "dotted" | "blank";
+}
+
+export interface BookCompanionSettings {
+	ai: AiSettings;
+	learner: LearnerSettings;
+	notes: NotesSettings;
+	reader: ReaderSettings;
+	ink: InkSettings;
+}
+
+export const PROVIDER_DEFAULTS: Record<Provider, { baseUrl: string; model: string; needsKey: boolean; label: string; kind: "api" | "cli" | "handoff"; help?: string }> = {
+	"claude-sub": { kind: "cli", baseUrl: "", model: "", needsKey: false, label: "My Claude subscription (Pro / Max)", help: "Uses the Claude Code app on this computer, signed in with your Claude account (run \"claude\" once in a terminal to sign in). On phones, questions go to your chat app instead." },
+	"chatgpt-sub": { kind: "cli", baseUrl: "", model: "", needsKey: false, label: "My ChatGPT subscription (Plus / Pro)", help: "Uses the Codex app on this computer, signed in with your ChatGPT account (run \"codex\" once in a terminal to sign in). On phones, questions go to your chat app instead." },
+	"gemini-sub": { kind: "cli", baseUrl: "", model: "", needsKey: false, label: "My Google account (Gemini)", help: "Uses the Gemini CLI on this computer, signed in with your Google account. On phones, questions go to your chat app instead." },
+	"chat-app": { kind: "handoff", baseUrl: "", model: "", needsKey: false, label: "My chat app, any device (paste the answer back)", help: "Opens ChatGPT, Claude or Gemini with your question ready; paste the answer back into the reader. Works on phones with any subscription." },
+	anthropic: { kind: "api", baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-5-5", needsKey: true, label: "Anthropic API key" },
+	openai: { kind: "api", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", needsKey: true, label: "OpenAI API key" },
+	openrouter: { kind: "api", baseUrl: "https://openrouter.ai/api/v1", model: "anthropic/claude-haiku-5-5", needsKey: true, label: "OpenRouter API key" },
+	ollama: { kind: "api", baseUrl: "http://localhost:11434/v1", model: "llama3.1", needsKey: false, label: "Ollama (free, on this computer)" },
+	custom: { kind: "api", baseUrl: "http://localhost:1234/v1", model: "local-model", needsKey: false, label: "Other OpenAI-compatible service" },
+};
+
+export const HIGHLIGHT_COLORS: Record<string, string> = {
+	yellow: "#ffd43b",
+	green: "#8ce99a",
+	blue: "#74c0fc",
+	pink: "#faa2c1",
+	orange: "#ffa94d",
+};
+
+export const DEFAULT_SETTINGS: BookCompanionSettings = {
+	ai: {
+		provider: "claude-sub",
+		apiKey: "",
+		baseUrl: "",
+		model: "",
+		temperature: 0.3,
+		maxTokens: 1200,
+		cliPath: "",
+		chatApp: "claude",
+	},
+	learner: {
+		nativeLanguage: "Ukrainian",
+		learningLanguage: "English",
+		level: "B1",
+		explainIn: "learning",
+		extraInstructions: "",
+	},
+	notes: {
+		rootFolder: "Books",
+		highlightsToBookPage: true,
+		flashcardTag: "flashcards",
+		typedNotes: "auto",
+		schemaFolder: "",
+	},
+	reader: {
+		openPdfInReader: false,
+		epubLayout: "paged",
+		fontSize: 18,
+		lineHeight: 1.6,
+		fontFamily: "serif",
+		paper: "theme",
+		defaultHighlight: "yellow",
+	},
+	ink: {
+		penOnly: false,
+		penColor: "#1c7ed6",
+		penWidth: 2.5,
+		paperStyle: "lined",
+	},
+};
+
+export function mergeSettings(saved: any): BookCompanionSettings {
+	const s = JSON.parse(JSON.stringify(DEFAULT_SETTINGS)) as BookCompanionSettings;
+	if (!saved || typeof saved !== "object") return s;
+	for (const k of Object.keys(s) as (keyof BookCompanionSettings)[]) {
+		if (saved[k] && typeof saved[k] === "object") Object.assign(s[k], saved[k]);
+	}
+	return s;
+}
+
+export class BookCompanionSettingTab extends PluginSettingTab {
+	constructor(app: App, private plugin: BookCompanionPlugin) {
+		super(app, plugin);
+	}
+
+	display(): void {
+		const { containerEl } = this;
+		const s = this.plugin.settings;
+		const save = () => this.plugin.saveSettings();
+		containerEl.empty();
+
+		new Setting(containerEl).setName("AI helper").setHeading();
+		const pd = PROVIDER_DEFAULTS[s.ai.provider];
+		new Setting(containerEl)
+			.setName("AI service")
+			.setDesc(pd.help ?? "Who answers your questions. Subscriptions you already pay for work without an API key.")
+			.addDropdown((d) => {
+				for (const [k, v] of Object.entries(PROVIDER_DEFAULTS)) d.addOption(k, v.label);
+				d.setValue(s.ai.provider).onChange(async (v) => {
+					const p = v as Provider;
+					s.ai.provider = p;
+					s.ai.baseUrl = PROVIDER_DEFAULTS[p].baseUrl;
+					s.ai.model = PROVIDER_DEFAULTS[p].model;
+					await save();
+					this.display();
+				});
+			});
+		if (pd.kind === "cli") {
+			new Setting(containerEl)
+				.setName("Model (optional)")
+				.setDesc("Leave empty for your subscription's default, or type one such as sonnet or opus.")
+				.addText((t) => t.setValue(s.ai.model).onChange(async (v) => { s.ai.model = v.trim(); await save(); }));
+			new Setting(containerEl)
+				.setName("App location (optional)")
+				.setDesc("Only if it isn't found by itself: the full path to the app's command line.")
+				.addText((t) => t.setPlaceholder("/opt/homebrew/bin/claude").setValue(s.ai.cliPath).onChange(async (v) => { s.ai.cliPath = v.trim(); await save(); }));
+		}
+		new Setting(containerEl)
+			.setName("Chat app for phones")
+			.setDesc("Where questions go when your subscription can't be reached from this device.")
+			.addDropdown((d) => d.addOption("claude", "Claude").addOption("chatgpt", "ChatGPT").addOption("gemini", "Gemini")
+				.setValue(s.ai.chatApp).onChange(async (v) => { s.ai.chatApp = v as any; await save(); }));
+		if (pd.kind === "api") {
+		new Setting(containerEl)
+			.setName("API key")
+			.setDesc("Saved in this vault's plugin settings in plain text. Leave empty for Ollama.")
+			.addText((t) => {
+				t.inputEl.type = "password";
+				t.setPlaceholder("sk-…").setValue(s.ai.apiKey).onChange(async (v) => {
+					s.ai.apiKey = v.trim();
+					await save();
+				});
+			});
+		new Setting(containerEl)
+			.setName("Model")
+			.setDesc("Any model name your service offers.")
+			.addText((t) => t.setValue(s.ai.model).onChange(async (v) => { s.ai.model = v.trim(); await save(); }));
+		new Setting(containerEl)
+			.setName("Service address")
+			.setDesc("Change only for a self-hosted or compatible service.")
+			.addText((t) => t.setValue(s.ai.baseUrl).onChange(async (v) => { s.ai.baseUrl = v.trim(); await save(); }));
+		new Setting(containerEl)
+			.setName("Creativity")
+			.setDesc("Lower is more precise.")
+			.addSlider((sl) => sl.setLimits(0, 1, 0.1).setValue(s.ai.temperature).setDynamicTooltip().onChange(async (v) => { s.ai.temperature = v; await save(); }));
+		}
+		new Setting(containerEl)
+			.setName("Test the connection")
+			.addButton((b) => b.setButtonText("Test").onClick(() => this.plugin.testAi()));
+
+		new Setting(containerEl).setName("Language learning").setHeading();
+		new Setting(containerEl)
+			.setName("My native language")
+			.addText((t) => t.setValue(s.learner.nativeLanguage).onChange(async (v) => { s.learner.nativeLanguage = v.trim(); await save(); }));
+		new Setting(containerEl)
+			.setName("Language I'm learning")
+			.setDesc("Usually the language of the books you read.")
+			.addText((t) => t.setValue(s.learner.learningLanguage).onChange(async (v) => { s.learner.learningLanguage = v.trim(); await save(); }));
+		new Setting(containerEl)
+			.setName("My level")
+			.setDesc("A1 beginner … C2 near-native. Simplified text and word lists are written for this level.")
+			.addDropdown((d) => {
+				const levels: Record<string, string> = { A1: "A1 – beginner", A2: "A2 – elementary", B1: "B1 – intermediate", B2: "B2 – upper intermediate", C1: "C1 – advanced", C2: "C2 – proficient", native: "Native speaker" };
+				for (const [k, v] of Object.entries(levels)) d.addOption(k, v);
+				d.setValue(s.learner.level).onChange(async (v) => { s.learner.level = v as Level; await save(); });
+			});
+		new Setting(containerEl)
+			.setName("Explain in")
+			.setDesc("Write explanations in my native language, or in simple words of the language I'm learning (more practice).")
+			.addDropdown((d) => d.addOption("learning", "Simple words of the language I'm learning").addOption("native", "My native language")
+				.setValue(s.learner.explainIn).onChange(async (v) => { s.learner.explainIn = v as any; await save(); }));
+		new Setting(containerEl)
+			.setName("Anything else the AI should know")
+			.setDesc("For example: \"I study biology\" or \"keep answers short\".")
+			.addTextArea((t) => t.setValue(s.learner.extraInstructions).onChange(async (v) => { s.learner.extraInstructions = v; await save(); }));
+
+		new Setting(containerEl).setName("Notes in your vault").setHeading();
+		new Setting(containerEl)
+			.setName("Books folder")
+			.setDesc("Each book gets its own folder here with a book page, notes, vocabulary and handwriting.")
+			.addText((t) => t.setValue(s.notes.rootFolder).onChange(async (v) => { s.notes.rootFolder = v.trim() || "Books"; await save(); }));
+		new Setting(containerEl)
+			.setName("Add highlights to the book page")
+			.addToggle((t) => t.setValue(s.notes.highlightsToBookPage).onChange(async (v) => { s.notes.highlightsToBookPage = v; await save(); }));
+		new Setting(containerEl)
+			.setName("Flashcard tag")
+			.setDesc("Vocabulary notes get this tag so flashcard plugins (like Spaced Repetition) pick them up.")
+			.addText((t) => t.setValue(s.notes.flashcardTag).onChange(async (v) => { s.notes.flashcardTag = v.trim().replace(/^#/, ""); await save(); }));
+
+		new Setting(containerEl).setName("Typed Graph").setHeading();
+		const tgOn = this.plugin.typedGraphEnabled();
+		new Setting(containerEl)
+			.setName("Typed notes")
+			.setDesc(`Give book pages, notes, AI explanations, handwriting and vocabulary Typed Graph types (Book, Quote, ReadingNote…) and typed links, so you can query your reading with openCypher and see it in the graph view. Typed Graph is ${tgOn ? "on in this vault" : "not on in this vault"}.`)
+			.addDropdown((d) => d.addOption("auto", "When Typed Graph is on").addOption("on", "Always").addOption("off", "Never")
+				.setValue(s.notes.typedNotes).onChange(async (v) => { s.notes.typedNotes = v as any; await save(); }));
+		new Setting(containerEl)
+			.setName("Schema folder")
+			.setDesc("Leave empty to use Typed Graph's own schema folder.")
+			.addText((t) => t.setPlaceholder("Types").setValue(s.notes.schemaFolder).onChange(async (v) => { s.notes.schemaFolder = v.trim(); await save(); }));
+		new Setting(containerEl)
+			.setName("Add the book types to the schema")
+			.setDesc("Writes the reader's types, and Typed Graph's library ontology if your vault has no Book type yet. Happens by itself with the first book page.")
+			.addButton((b) => b.setButtonText("Add types").onClick(() => void this.plugin.installTypedSchema()));
+
+		new Setting(containerEl).setName("Reading").setHeading();
+		new Setting(containerEl)
+			.setName("Open PDFs in this reader")
+			.setDesc("Replace Obsidian's own PDF viewer. When off, use \"Open in Book Reader\" from a PDF's menu.")
+			.addToggle((t) => t.setValue(s.reader.openPdfInReader).onChange(async (v) => { s.reader.openPdfInReader = v; await save(); this.plugin.applyPdfOverride(); }));
+		new Setting(containerEl)
+			.setName("EPUB layout")
+			.addDropdown((d) => d.addOption("paged", "Turn pages (like an e-reader)").addOption("scroll", "Scroll")
+				.setValue(s.reader.epubLayout).onChange(async (v) => { s.reader.epubLayout = v as any; await save(); this.plugin.refreshReaders(); }));
+		new Setting(containerEl)
+			.setName("Text size")
+			.addSlider((sl) => sl.setLimits(12, 32, 1).setValue(s.reader.fontSize).setDynamicTooltip().onChange(async (v) => { s.reader.fontSize = v; await save(); this.plugin.refreshReaders(); }));
+		new Setting(containerEl)
+			.setName("Font")
+			.addDropdown((d) => d.addOption("serif", "Book (serif)").addOption("sans", "Clean (sans-serif)").addOption("theme", "Same as Obsidian")
+				.setValue(s.reader.fontFamily).onChange(async (v) => { s.reader.fontFamily = v as any; await save(); this.plugin.refreshReaders(); }));
+		new Setting(containerEl)
+			.setName("Paper")
+			.addDropdown((d) => d.addOption("theme", "Same as Obsidian").addOption("sepia", "Sepia").addOption("light", "Light").addOption("dark", "Dark")
+				.setValue(s.reader.paper).onChange(async (v) => { s.reader.paper = v as any; await save(); this.plugin.refreshReaders(); }));
+
+		new Setting(containerEl).setName("Handwriting").setHeading();
+		new Setting(containerEl)
+			.setName("Draw with a pen only")
+			.setDesc("Ignore fingers and palms while drawing (for Apple Pencil, S Pen and other styluses).")
+			.addToggle((t) => t.setValue(s.ink.penOnly).onChange(async (v) => { s.ink.penOnly = v; await save(); }));
+		new Setting(containerEl)
+			.setName("Pen colour")
+			.addColorPicker((c) => c.setValue(s.ink.penColor).onChange(async (v) => { s.ink.penColor = v; await save(); }));
+		new Setting(containerEl)
+			.setName("Paper for handwritten notes")
+			.addDropdown((d) => d.addOption("lined", "Lined").addOption("dotted", "Dotted").addOption("blank", "Blank")
+				.setValue(s.ink.paperStyle).onChange(async (v) => { s.ink.paperStyle = v as any; await save(); }));
+	}
+}

@@ -1,0 +1,10 @@
+{
+  "id": "book-companion-reader",
+  "name": "Book Companion Reader",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Read PDF and EPUB books on desktop and mobile. Select text to have AI explain or simplify it for your language level, and keep highlights, notes, vocabulary and handwriting linked to each book.",
+  "author": "Volodymyr Pavlyshyn",
+  "authorUrl": "https://github.com/Volland",
+  "isDesktopOnly": false
+}

@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Book Companion Reader – preview</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+	/* A few of Obsidian's theme variables, so the plugin looks as it does inside the app. */
+	:root {
+		--background-primary: #ffffff; --background-secondary: #f6f6f6; --background-secondary-alt: #efefef;
+		--background-modifier-border: #e0e0e0; --background-modifier-hover: rgba(0,0,0,.06);
+		--text-normal: #222; --text-muted: #6b6b6b; --text-faint: #a0a0a0; --text-accent: #7b5cd6; --text-error: #e03131;
+		--text-on-accent: #fff; --interactive-accent: #7b5cd6;
+		--font-ui-smaller: 11px; --font-ui-small: 13px; --font-ui-medium: 15px; --font-text: -apple-system, sans-serif;
+		--shadow-l: 0 8px 24px rgba(0,0,0,.18);
+	}
+	html, body { margin: 0; height: 100%; font-family: -apple-system, "Segoe UI", sans-serif; background: #d9d6e4; }
+	button { font: inherit; font-size: 13px; border: 1px solid var(--background-modifier-border); background: var(--background-primary); border-radius: 6px; padding: 4px 10px; cursor: pointer; color: var(--text-normal); }
+	button.mod-cta { background: var(--interactive-accent); color: #fff; border-color: transparent; }
+	textarea, input { font: inherit; border: 1px solid var(--background-modifier-border); border-radius: 6px; padding: 6px; box-sizing: border-box; }
+	.mock-icon { display: inline-block; min-width: 16px; text-align: center; font-size: 15px; line-height: 1; }
+	.wrap { display: flex; gap: 24px; padding: 20px; height: 100%; box-sizing: border-box; align-items: stretch; }
+	.window { flex: 1; display: flex; flex-direction: column; background: var(--background-primary); border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.25); min-width: 0; }
+	.titlebar { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #ececec; border-bottom: 1px solid #ddd; font-size: 12px; color: #555; flex-shrink: 0; }
+	.dot { width: 11px; height: 11px; border-radius: 50%; background: #ff5f57; } .dot:nth-child(2) { background: #febc2e; } .dot:nth-child(3) { background: #28c840; }
+	.tab { margin-left: 16px; padding: 4px 12px; background: #fff; border-radius: 6px 6px 0 0; }
+	.frame { position: relative; flex: 1; min-height: 0; display: flex; }
+	.frame > .workspace-leaf-content { flex: 1; display: flex; min-width: 0; }
+	.frame .view-content { flex: 1; min-width: 0; height: 100%; }
+	.phone { width: 390px; flex: none; border-radius: 34px; border: 10px solid #1d1d1f; }
+	.phone .titlebar { justify-content: center; background: var(--background-secondary); }
+	.label { position: absolute; }
+</style>
+</head>
+<body>
+<div class="wrap">
+	<div class="window">
+		<div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="tab">📖 Book Companion Reader</span></div>
+		<div class="frame" id="desktop"></div>
+	</div>
+	<div class="window phone is-phone" style="display:none">
+		<div class="titlebar">9:41 · Obsidian on a phone</div>
+		<div class="frame" id="phone"></div>
+	</div>
+</div>
+<div id="result" style="display:none"></div><script type="module" src="pdf-preview.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# dependencies and build output
+node_modules/
+target/
+main.js
+preview/preview.js
+preview/pdf-preview.js
+test/out/
+# local runs
+shots/
+selftest.json
+data.json
+.DS_Store
+.omc/
