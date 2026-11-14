@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 
 const { window, document, DOMParser } = parseHTML("<!doctype html><html><body></body></html>") as any;
 const g: any = globalThis;
-g.window = window; g.document = document; g.DOMParser = DOMParser;
+window.setTimeout = setTimeout as any; window.clearTimeout = clearTimeout as any; g.window = window; g.document = document; g.DOMParser = DOMParser;
 g.HTMLElement = window.HTMLElement; g.Node = window.Node; Object.defineProperty(g, "navigator", { value: { clipboard: { writeText: async () => {}, readText: async () => "" } }, configurable: true });
 g.__mockApp = { vault: {}, workspace: {} };
 

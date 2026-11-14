@@ -38,7 +38,7 @@ pre code { background: none; padding: 0; color: inherit; }
 .nav nav { display: flex; gap: 18px; flex-wrap: wrap; }
 .nav nav a { color: var(--muted); text-decoration: none; font-size: 15px; }
 .nav nav a:hover { color: var(--ink); }
-.nav .gh { color: var(--violet-2) !important; font-weight: 600; }
+.nav nav a.gh { color: var(--violet-2); font-weight: 600; }
 
 main { max-width: 1160px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 40px); }
 

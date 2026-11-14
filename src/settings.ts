@@ -136,11 +136,13 @@ export const DEFAULT_SETTINGS: BookCompanionSettings = {
 	},
 };
 
-export function mergeSettings(saved: any): BookCompanionSettings {
+export function mergeSettings(saved: unknown): BookCompanionSettings {
 	const s = JSON.parse(JSON.stringify(DEFAULT_SETTINGS)) as BookCompanionSettings;
 	if (!saved || typeof saved !== "object") return s;
+	const data = saved as Record<string, unknown>;
 	for (const k of Object.keys(s) as (keyof BookCompanionSettings)[]) {
-		if (saved[k] && typeof saved[k] === "object") Object.assign(s[k], saved[k]);
+		const part = data[k];
+		if (part && typeof part === "object") Object.assign(s[k], part);
 	}
 	return s;
 }
@@ -186,7 +188,7 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 			.setName("Chat app for phones")
 			.setDesc("Where questions go when your subscription can't be reached from this device.")
 			.addDropdown((d) => d.addOption("claude", "Claude").addOption("chatgpt", "ChatGPT").addOption("gemini", "Gemini")
-				.setValue(s.ai.chatApp).onChange(async (v) => { s.ai.chatApp = v as any; await save(); }));
+				.setValue(s.ai.chatApp).onChange(async (v) => { s.ai.chatApp = v as typeof s.ai.chatApp; await save(); }));
 		if (pd.kind === "api") {
 		new Setting(containerEl)
 			.setName("API key")
@@ -209,7 +211,7 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Creativity")
 			.setDesc("Lower is more precise.")
-			.addSlider((sl) => sl.setLimits(0, 1, 0.1).setValue(s.ai.temperature).setDynamicTooltip().onChange(async (v) => { s.ai.temperature = v; await save(); }));
+			.addSlider((sl) => sl.setLimits(0, 1, 0.1).setValue(s.ai.temperature).onChange(async (v) => { s.ai.temperature = v; await save(); }));
 		}
 		new Setting(containerEl)
 			.setName("Test the connection")
@@ -250,7 +252,7 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 			.setName("Explain in")
 			.setDesc("Write explanations in my native language, or in simple words of the language I'm learning (more practice).")
 			.addDropdown((d) => d.addOption("learning", "Simple words of the language I'm learning").addOption("native", "My native language")
-				.setValue(s.learner.explainIn).onChange(async (v) => { s.learner.explainIn = v as any; await save(); }));
+				.setValue(s.learner.explainIn).onChange(async (v) => { s.learner.explainIn = v as typeof s.learner.explainIn; await save(); }));
 		new Setting(containerEl)
 			.setName("Anything else the AI should know")
 			.setDesc("For example: \"I study biology\" or \"keep answers short\".")
@@ -260,7 +262,7 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Cards per study session")
 			.setDesc("Words you save from a book become flashcards in that book's deck. Make topic decks in the Flashcards view to group words your own way.")
-			.addSlider((sl) => sl.setLimits(5, 100, 5).setValue(s.cards.sessionSize).setDynamicTooltip().onChange(async (v) => { s.cards.sessionSize = v; await save(); }));
+			.addSlider((sl) => sl.setLimits(5, 100, 5).setValue(s.cards.sessionSize).onChange(async (v) => { s.cards.sessionSize = v; await save(); }));
 
 		new Setting(containerEl).setName("Notes in your vault").setHeading();
 		new Setting(containerEl)
@@ -281,7 +283,7 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 			.setName("Typed notes")
 			.setDesc(`Give book pages, notes, AI explanations, handwriting and vocabulary Typed Graph types (Book, Quote, ReadingNote…) and typed links, so you can query your reading with openCypher and see it in the graph view. Typed Graph is ${tgOn ? "on in this vault" : "not on in this vault"}.`)
 			.addDropdown((d) => d.addOption("auto", "When Typed Graph is on").addOption("on", "Always").addOption("off", "Never")
-				.setValue(s.notes.typedNotes).onChange(async (v) => { s.notes.typedNotes = v as any; await save(); }));
+				.setValue(s.notes.typedNotes).onChange(async (v) => { s.notes.typedNotes = v as typeof s.notes.typedNotes; await save(); }));
 		new Setting(containerEl)
 			.setName("Schema folder")
 			.setDesc("Leave empty to use Typed Graph's own schema folder.")
@@ -299,18 +301,18 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("EPUB layout")
 			.addDropdown((d) => d.addOption("paged", "Turn pages (like an e-reader)").addOption("scroll", "Scroll")
-				.setValue(s.reader.epubLayout).onChange(async (v) => { s.reader.epubLayout = v as any; await save(); this.plugin.refreshReaders(); }));
+				.setValue(s.reader.epubLayout).onChange(async (v) => { s.reader.epubLayout = v as typeof s.reader.epubLayout; await save(); this.plugin.refreshReaders(); }));
 		new Setting(containerEl)
 			.setName("Text size")
-			.addSlider((sl) => sl.setLimits(12, 32, 1).setValue(s.reader.fontSize).setDynamicTooltip().onChange(async (v) => { s.reader.fontSize = v; await save(); this.plugin.refreshReaders(); }));
+			.addSlider((sl) => sl.setLimits(12, 32, 1).setValue(s.reader.fontSize).onChange(async (v) => { s.reader.fontSize = v; await save(); this.plugin.refreshReaders(); }));
 		new Setting(containerEl)
 			.setName("Font")
 			.addDropdown((d) => d.addOption("serif", "Book (serif)").addOption("sans", "Clean (sans-serif)").addOption("theme", "Same as Obsidian")
-				.setValue(s.reader.fontFamily).onChange(async (v) => { s.reader.fontFamily = v as any; await save(); this.plugin.refreshReaders(); }));
+				.setValue(s.reader.fontFamily).onChange(async (v) => { s.reader.fontFamily = v as typeof s.reader.fontFamily; await save(); this.plugin.refreshReaders(); }));
 		new Setting(containerEl)
 			.setName("Paper")
 			.addDropdown((d) => d.addOption("theme", "Same as Obsidian").addOption("sepia", "Sepia").addOption("light", "Light").addOption("dark", "Dark")
-				.setValue(s.reader.paper).onChange(async (v) => { s.reader.paper = v as any; await save(); this.plugin.refreshReaders(); }));
+				.setValue(s.reader.paper).onChange(async (v) => { s.reader.paper = v as typeof s.reader.paper; await save(); this.plugin.refreshReaders(); }));
 
 		new Setting(containerEl).setName("Handwriting").setHeading();
 		new Setting(containerEl)
@@ -323,6 +325,6 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Paper for handwritten notes")
 			.addDropdown((d) => d.addOption("lined", "Lined").addOption("dotted", "Dotted").addOption("blank", "Blank")
-				.setValue(s.ink.paperStyle).onChange(async (v) => { s.ink.paperStyle = v as any; await save(); }));
+				.setValue(s.ink.paperStyle).onChange(async (v) => { s.ink.paperStyle = v as typeof s.ink.paperStyle; await save(); }));
 	}
 }

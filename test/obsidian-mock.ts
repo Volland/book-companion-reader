@@ -19,6 +19,8 @@ export function installDomHelpers(win: any) {
 		proto.createEl = function (tag: string, o?: Attrs | string) { const el = this.ownerDocument.createElement(tag); ap(el, o); this.appendChild(el); return el; };
 		proto.createDiv = function (o?: Attrs | string) { return this.createEl("div", o); };
 		proto.createSpan = function (o?: Attrs | string) { return this.createEl("span", o); };
+		proto.setCssProps = function (p: Record<string, string>) { for (const [k, v] of Object.entries(p)) this.style.setProperty(k, v); };
+		(globalThis as any).createEl = (tag: string, o?: Attrs | string) => { const el = win.document.createElement(tag); ap(el, o); return el; };
 		proto.empty = function () { while (this.firstChild) this.removeChild(this.firstChild); };
 		proto.appendText = function (t: string) { this.appendChild(this.ownerDocument.createTextNode(t)); };
 		proto.setText = function (t: string) { this.textContent = t; };

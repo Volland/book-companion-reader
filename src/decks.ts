@@ -1,4 +1,4 @@
-import type { Loc } from "./types";
+import type { Loc, VocabEntry } from "./types";
 import { uid } from "./types";
 
 export type DeckKind = "book" | "topic";
@@ -96,13 +96,14 @@ export interface DeckStats {
 export class DeckStore {
 	decks: Deck[] = [];
 	cards: Card[] = [];
-	private timer: any = null;
+	private timer: number | null = null;
 
 	constructor(private persist: () => Promise<void>) {}
 
-	load(raw: any) {
-		this.decks = Array.isArray(raw?.decks) ? raw.decks.filter((d: any) => d?.id && d?.name) : [];
-		this.cards = Array.isArray(raw?.cards) ? raw.cards.filter((c: any) => c?.id && c?.deckId && c?.word) : [];
+	load(raw: unknown) {
+		const data = (raw ?? {}) as { decks?: Partial<Deck>[]; cards?: Partial<Card>[] };
+		this.decks = Array.isArray(data.decks) ? (data.decks.filter((d) => d?.id && d?.name) as Deck[]) : [];
+		this.cards = Array.isArray(data.cards) ? (data.cards.filter((c) => c?.id && c?.deckId && c?.word) as Card[]) : [];
 	}
 
 	toJSON() {
@@ -110,15 +111,15 @@ export class DeckStore {
 	}
 
 	saveSoon(ms = 600) {
-		if (this.timer) clearTimeout(this.timer);
-		this.timer = setTimeout(() => {
+		if (this.timer) window.clearTimeout(this.timer);
+		this.timer = window.setTimeout(() => {
 			this.timer = null;
 			void this.persist();
 		}, ms);
 	}
 
 	async flush() {
-		if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+		if (this.timer) { window.clearTimeout(this.timer); this.timer = null; }
 		await this.persist();
 	}
 
@@ -182,7 +183,7 @@ export class DeckStore {
 		const existing = this.cards.find((c) => c.deckId === input.deckId && key(c.word) === key(input.word));
 		if (existing) {
 			for (const f of ["form", "translation", "meaning", "example", "context", "bookPath", "loc", "language"] as const) {
-				if (!existing[f] && input[f]) (existing as any)[f] = input[f];
+				if (!existing[f] && input[f]) Object.assign(existing, { [f]: input[f] });
 			}
 			this.saveSoon();
 			return { card: existing, created: false };
@@ -238,7 +239,7 @@ export class DeckStore {
 	}
 
 	/** Words saved by version 0.1 (kept on each book) become cards in that book's deck. */
-	importLegacy(books: Record<string, { title?: string; vocab?: any[] }>): number {
+	importLegacy(books: Record<string, { title?: string; vocab?: VocabEntry[] }>): number {
 		let n = 0;
 		for (const [path, b] of Object.entries(books)) {
 			if (!b.vocab?.length) continue;

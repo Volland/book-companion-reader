@@ -33,7 +33,7 @@ export function resolvePath(base: string, rel: string): string {
 }
 
 function byLocalName(root: Document | Element, name: string): Element[] {
-	return Array.from((root as any).querySelectorAll("*") as NodeListOf<Element>).filter((e) => (e.localName || e.nodeName).toLowerCase().replace(/^.*:/, "") === name);
+	return Array.from(root.querySelectorAll("*")).filter((e) => (e.localName || e.nodeName).toLowerCase().replace(/^.*:/, "") === name);
 }
 
 function firstText(root: Document | Element, name: string): string {
@@ -164,13 +164,13 @@ export function chapterHtml(book: EpubBook, index: number, parser: DomParserLike
 		const img = byLocalName(svg, "image")[0];
 		if (img) {
 			const href = img.getAttribute("xlink:href") ?? img.getAttribute("href") ?? "";
-			const rep = doc.createElement("img");
+			const rep = createEl("img");
 			rep.setAttribute("data-bcr-src", resolvePath(ch.href, href));
 			rep.setAttribute("alt", "");
 			svg.parentNode?.replaceChild(rep, svg);
 		}
 	}
-	const all = Array.from((body as any).querySelectorAll("*") as NodeListOf<Element>);
+	const all = Array.from(body.querySelectorAll("*"));
 	for (const el of all) {
 		for (const attr of Array.from(el.attributes)) {
 			const n = attr.name.toLowerCase();
@@ -196,6 +196,6 @@ export function chapterHtml(book: EpubBook, index: number, parser: DomParserLike
 			}
 		}
 	}
-	const serializer = (body as any).innerHTML as string;
+	const serializer = body.innerHTML;
 	return serializer;
 }

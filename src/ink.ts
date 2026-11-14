@@ -100,7 +100,7 @@ export function svgToStrokes(svg: string): { strokes: InkStroke[]; aspect: numbe
 	const m = /<metadata id="bcr-ink">([\s\S]*?)<\/metadata>/.exec(svg);
 	if (!m) return null;
 	try {
-		const data = JSON.parse(unesc(m[1]));
+		const data = JSON.parse(unesc(m[1])) as { strokes?: InkStroke[]; aspect?: number; paper?: string };
 		if (!Array.isArray(data.strokes)) return null;
 		return { strokes: data.strokes, aspect: data.aspect ?? 1.3, paper: data.paper ?? "blank" };
 	} catch {
@@ -133,9 +133,7 @@ export class InkSurface {
 	private pan: { id: number; x: number; y: number } | null = null;
 
 	constructor(private parent: HTMLElement, private opts: InkSurfaceOptions) {
-		this.canvas = parent.ownerDocument.createElement("canvas");
-		this.canvas.className = "bcr-ink-canvas";
-		parent.appendChild(this.canvas);
+		this.canvas = parent.createEl("canvas", { cls: "bcr-ink-canvas" });
 		this.canvas.addEventListener("pointerdown", this.onDown);
 		this.canvas.addEventListener("pointermove", this.onMove);
 		this.canvas.addEventListener("pointerup", this.onUp);
@@ -149,8 +147,7 @@ export class InkSurface {
 	setEnabled(on: boolean) {
 		this.enabled = on;
 		this.canvas.toggleClass?.("is-drawing", on);
-		this.canvas.style.pointerEvents = on ? "auto" : "none";
-		this.canvas.style.touchAction = on ? "none" : "auto";
+		this.canvas.setCssProps({ "pointer-events": on ? "auto" : "none", "touch-action": on ? "none" : "auto" });
 	}
 
 	isEnabled() {
@@ -167,11 +164,10 @@ export class InkSurface {
 	resize(width?: number, height?: number) {
 		this.w = Math.max(1, width ?? this.parent.clientWidth);
 		this.h = Math.max(1, height ?? this.parent.clientHeight);
-		const dpr = Math.min(2, (globalThis as any).devicePixelRatio || 1);
+		const dpr = Math.min(2, window.devicePixelRatio || 1);
 		this.canvas.width = Math.round(this.w * dpr);
 		this.canvas.height = Math.round(this.h * dpr);
-		this.canvas.style.width = `${this.w}px`;
-		this.canvas.style.height = `${this.h}px`;
+		this.canvas.setCssProps({ width: `${this.w}px`, height: `${this.h}px` });
 		this.redraw();
 	}
 
@@ -292,7 +288,7 @@ export class InkSurface {
 		}
 		if (e.pointerId !== this.activePointer) return;
 		e.preventDefault();
-		const events = (e as any).getCoalescedEvents?.() as PointerEvent[] | undefined;
+		const events = (e as PointerEvent & { getCoalescedEvents?: () => PointerEvent[] }).getCoalescedEvents?.();
 		const list = events && events.length ? events : [e];
 		if (!this.current) {
 			for (const ev of list) { const [x, y] = this.pos(ev); this.erase(x, y); }

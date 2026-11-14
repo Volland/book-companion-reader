@@ -64,13 +64,13 @@ export class LibraryView extends ItemView {
 		const card = grid.createDiv({ cls: "bcr-lib-card" });
 		const cover = card.createDiv({ cls: "bcr-cover" });
 		const [c1, c2] = coverColors(title);
-		cover.style.background = `linear-gradient(150deg, ${c1}, ${c2})`;
+		cover.setCssProps({ background: `linear-gradient(150deg, ${c1}, ${c2})` });
 		cover.createDiv({ cls: "bcr-cover-title", text: title });
 		if (data?.author) cover.createDiv({ cls: "bcr-cover-author", text: data.author });
 		cover.createDiv({ cls: "bcr-cover-badge", text: f.extension.toUpperCase() });
 		const info = card.createDiv({ cls: "bcr-lib-info" });
 		const bar = info.createDiv({ cls: "bcr-lib-bar" });
-		bar.createDiv({ cls: "bcr-lib-bar-fill" }).style.width = `${Math.round((data?.progress ?? 0) * 100)}%`;
+		bar.createDiv({ cls: "bcr-lib-bar-fill" }).setCssProps({ width: `${Math.round((data?.progress ?? 0) * 100)}%` });
 		const line = info.createDiv({ cls: "bcr-lib-line" });
 		line.createSpan({ text: data?.progress ? `${Math.round(data.progress * 100)}%` : "Not started" });
 		const counts = [data?.highlights.length ? `${data.highlights.length} highlights` : "", data?.vocab.length ? `${data.vocab.length} words` : ""].filter(Boolean).join(" · ");

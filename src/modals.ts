@@ -1,4 +1,4 @@
-import { App, FuzzySuggestModal, Modal, Notice, setIcon } from "obsidian";
+import { App, FuzzySuggestModal, FuzzyMatch, Modal, Notice, setIcon } from "obsidian";
 import { InkStroke } from "./types";
 import { InkSurface, InkTool, InkToolName, drawPaper, strokesToSvg } from "./ink";
 import type { InkSettings } from "./settings";
@@ -27,7 +27,7 @@ export class NoteModal extends Modal {
 			await this.onSave(ta.value);
 			this.close();
 		};
-		setTimeout(() => ta.focus(), 50);
+		window.setTimeout(() => ta.focus(), 50);
 	}
 
 	onClose() {
@@ -58,7 +58,7 @@ export class TextPromptModal extends Modal {
 		});
 		const row = this.contentEl.createDiv({ cls: "bcr-modal-buttons" });
 		row.createEl("button", { text: "OK", cls: "mod-cta" }).onclick = submit;
-		setTimeout(() => input.focus(), 50);
+		window.setTimeout(() => input.focus(), 50);
 	}
 
 	onClose() {
@@ -79,8 +79,8 @@ export class TocModal extends FuzzySuggestModal<TocEntry> {
 	}
 	getItems() { return this.entries; }
 	getItemText(e: TocEntry) { return e.title; }
-	renderSuggestion(item: any, el: HTMLElement) {
-		el.createDiv({ text: item.item.title, attr: { style: `padding-left:${item.item.depth * 14}px` } });
+	renderSuggestion(item: FuzzyMatch<TocEntry>, el: HTMLElement) {
+		el.createDiv({ text: item.item.title }).setCssProps({ "padding-left": `${item.item.depth * 14}px` });
 	}
 	onChooseItem(e: TocEntry) { e.go(); }
 }
@@ -100,7 +100,7 @@ export function buildInkToolbar(parent: HTMLElement, state: { tool: InkTool }, a
 	const swatches: HTMLElement[] = [];
 	for (const c of INK_COLORS) {
 		const sw = bar.createEl("button", { cls: "bcr-swatch", attr: { "aria-label": `Colour ${c}` } });
-		sw.style.background = c;
+		sw.setCssProps({ background: c });
 		sw.dataset.color = c;
 		sw.onclick = () => { state.tool = { ...state.tool, color: c, tool: state.tool.tool === "eraser" ? "pen" : state.tool.tool }; refresh(); };
 		swatches.push(sw);
@@ -142,7 +142,7 @@ export class HandwritingModal extends Modal {
 	}
 
 	private paperStyle(): "lined" | "dotted" | "blank" {
-		return (this.initial?.paper as any) ?? this.ink.paperStyle;
+		return (this.initial?.paper as "lined" | "dotted" | "blank" | undefined) ?? this.ink.paperStyle;
 	}
 
 	onOpen() {
@@ -165,11 +165,10 @@ export class HandwritingModal extends Modal {
 		this.surface.setEnabled(true);
 		const size = () => {
 			const w = Math.min(900, scroller.clientWidth - 8 || 600);
-			sheet.style.width = `${w}px`;
-			sheet.style.height = `${w * this.aspect}px`;
+			sheet.setCssProps({ width: `${w}px`, height: `${w * this.aspect}px` });
 			this.surface!.resize(w, w * this.aspect);
 		};
-		setTimeout(() => {
+		window.setTimeout(() => {
 			size();
 			if (this.initial) this.surface!.setStrokes(this.initial.strokes);
 		}, 30);

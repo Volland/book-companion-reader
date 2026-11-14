@@ -74,7 +74,7 @@ export function renderStudy(parent: HTMLElement, store: DeckStore, cards: Card[]
 		bar.createSpan({ text: `${queue.length} left` });
 		bar.createSpan({ cls: "bcr-muted", text: [deck?.name, c.language].filter(Boolean).join(" · ") });
 		const prog = parent.createDiv({ cls: "bcr-study-progress" });
-		prog.createDiv({ cls: "bcr-study-progress-fill" }).style.width = `${Math.round((done / total) * 100)}%`;
+		prog.createDiv({ cls: "bcr-study-progress-fill" }).setCssProps({ width: `${Math.round((done / total) * 100)}%` });
 
 		const face = parent.createDiv({ cls: "bcr-flashcard" });
 		face.createDiv({ cls: "bcr-flash-word", text: c.word });
@@ -187,7 +187,7 @@ export class CardModal extends Modal {
 			this.close();
 			this.opts.onSave();
 		};
-		setTimeout(() => word.focus(), 50);
+		window.setTimeout(() => word.focus(), 50);
 	}
 
 	onClose() {
@@ -350,7 +350,7 @@ export class DecksView extends ItemView {
 		meta.createEl("a", { text: "move" }).onclick = (e) => {
 			const m = new Menu();
 			for (const d of this.store.sortedDecks()) if (d.id !== card.deckId) m.addItem((i) => i.setTitle(d.name).setIcon(d.kind === "book" ? "book" : "tag").onClick(() => { this.store.moveCard(card.id, d.id); this.render(); }));
-			m.showAtMouseEvent(e as MouseEvent);
+			m.showAtMouseEvent(e);
 		};
 		meta.createEl("a", { text: "remove" }).onclick = () => { this.store.deleteCard(card.id); this.render(); };
 	}
@@ -363,7 +363,7 @@ export class DecksView extends ItemView {
 		head.createEl("h2", { text: mode.title });
 		const box = c.createDiv({ cls: "bcr-study-wrap" });
 		renderStudy(box, this.store, mode.cards, {
-			openBook: (card) => card.bookPath && this.plugin.openBookPath(card.bookPath, card.loc),
+			openBook: (card) => { if (card.bookPath) void this.plugin.openBookPath(card.bookPath, card.loc); },
 			onDone: () => { this.mode = mode.back; this.render(); },
 		});
 	}

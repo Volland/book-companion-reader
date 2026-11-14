@@ -47,8 +47,16 @@ function extraPath(home: string): string[] {
 	return [`${home}/.local/bin`, `${home}/.claude/local`, `${home}/.npm-global/bin`, `${home}/.bun/bin`, `${home}/.volta/bin`, "/opt/homebrew/bin", "/usr/local/bin", `${home}/AppData/Roaming/npm`];
 }
 
+type NodeRequire = (id: string) => unknown;
+
+/** Obsidian's desktop app exposes Node's `require` on the window; mobile doesn't. */
+function nodeRequire(): NodeRequire | undefined {
+	const w = window as unknown as { require?: NodeRequire };
+	return w.require;
+}
+
 export function desktopCliAvailable(): boolean {
-	const req = (globalThis as any).require ?? (globalThis as any).window?.require;
+	const req = nodeRequire();
 	try {
 		return !!req && !!req("child_process");
 	} catch {
@@ -57,11 +65,12 @@ export function desktopCliAvailable(): boolean {
 }
 
 export async function runCli(s: AiSettings, system: string, messages: ChatMessage[]): Promise<string> {
-	const req = (globalThis as any).require ?? (globalThis as any).window?.require;
-	const cp = req("child_process");
-	const os = req("os");
-	const fs = req("fs");
-	const path = req("path");
+	const req = nodeRequire();
+	if (!req) throw new Error("This needs the desktop app.");
+	const cp = req("child_process") as typeof import("child_process");
+	const os = req("os") as typeof import("os");
+	const fs = req("fs") as typeof import("fs");
+	const path = req("path") as typeof import("path");
 	const tmp = path.join(os.tmpdir(), `book-companion-${Date.now()}.txt`);
 	const cmd = buildCliCommand(s, system, messages, tmp);
 	const home = os.homedir();
@@ -71,17 +80,17 @@ export async function runCli(s: AiSettings, system: string, messages: ChatMessag
 	return await new Promise<string>((resolve, reject) => {
 		const child = cp.spawn(cmd.bin, cmd.args, { cwd: os.tmpdir(), env, shell: process.platform === "win32" });
 		let out = "", err = "";
-		const timer = setTimeout(() => { child.kill(); reject(new Error("The subscription app took too long to answer (2 minutes).")); }, 120000);
-		child.stdout.on("data", (d: any) => (out += d.toString()));
-		child.stderr.on("data", (d: any) => (err += d.toString()));
-		child.on("error", (e: any) => {
-			clearTimeout(timer);
-			reject(new Error(e?.code === "ENOENT"
+		const timer = window.setTimeout(() => { child.kill(); reject(new Error("The subscription app took too long to answer (2 minutes).")); }, 120000);
+		child.stdout.on("data", (d: Buffer) => (out += d.toString()));
+		child.stderr.on("data", (d: Buffer) => (err += d.toString()));
+		child.on("error", (e: NodeJS.ErrnoException) => {
+			window.clearTimeout(timer);
+			reject(new Error(e.code === "ENOENT"
 				? `Couldn't find "${cmd.bin}". Install it and sign in once in a terminal, or set its full path in the plugin settings.`
-				: String(e?.message ?? e)));
+				: String(e.message)));
 		});
-		child.on("close", (code: number) => {
-			clearTimeout(timer);
+		child.on("close", (code: number | null) => {
+			window.clearTimeout(timer);
 			let answer = out;
 			if (cmd.answerFile) {
 				try { answer = fs.readFileSync(cmd.answerFile, "utf8"); fs.unlinkSync(cmd.answerFile); } catch { /* fall back to printed output */ }

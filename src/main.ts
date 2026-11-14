@@ -1,7 +1,7 @@
 import { Notice, Platform, Plugin, TAbstractFile, TFile, TFolder, WorkspaceLeaf, addIcon, loadPdfJs, normalizePath, requestUrl } from "obsidian";
 import { LOGO_ICON_ID, LOGO_ICON_SVG } from "./logo";
 import { DEFAULT_SCHEMA_FOLDER, TYPED_GRAPH_GRAPH_COMMAND, TYPED_GRAPH_ID, TypedState } from "./typed";
-import { AiClient, ChatMessage, HandoffNeeded } from "./ai";
+import { AiClient, ApiJson, ChatMessage, HandoffNeeded } from "./ai";
 import { desktopCliAvailable, runCli } from "./cliRunner";
 import { svgToStrokes } from "./ink";
 import { DeckStore } from "./decks";
@@ -13,6 +13,15 @@ import { ReaderHost, ReaderView, VIEW_TYPE_READER } from "./readerView";
 import { BookCompanionSettingTab, BookCompanionSettings, mergeSettings } from "./settings";
 import { BookStore } from "./store";
 import { BookMeta, Loc, formatOf, locFromString } from "./types";
+import type { PdfJs } from "./pdfRenderer";
+
+/** The parts of Obsidian's app object that aren't in its public types and that we use carefully (all optional). */
+interface AppInternals {
+	plugins?: { enabledPlugins?: Set<string>; plugins?: Record<string, { settings?: { schemaFolder?: string } } | undefined> };
+	commands?: { executeCommandById(id: string): boolean };
+	viewRegistry?: { unregisterExtensions(ext: string[]): void; registerExtensions(ext: string[], viewType: string): void };
+}
+const internals = (app: object) => app as AppInternals;
 
 export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 	settings!: BookCompanionSettings;
@@ -23,7 +32,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 	private pdfOverridden = false;
 
 	async onload() {
-		const raw = (await this.loadData()) ?? {};
+		const raw = ((await this.loadData()) ?? {}) as { settings?: unknown; books?: unknown; decks?: unknown };
 		this.settings = mergeSettings(raw.settings);
 		this.store = new BookStore(() => this.persist());
 		this.store.load(raw.books);
@@ -34,8 +43,8 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 		addIcon(LOGO_ICON_ID, LOGO_ICON_SVG);
 		this.ai = new AiClient(() => this.settings.ai, async (req) => {
 			const r = await requestUrl({ url: req.url, method: req.method, headers: req.headers, body: req.body, throw: false });
-			let json: any = null;
-			try { json = r.json; } catch { json = null; }
+			let json: ApiJson | null = null;
+			try { json = r.json as ApiJson; } catch { json = null; }
 			return { status: r.status, json, text: r.text };
 		}, runCli, () => Platform.isDesktopApp && desktopCliAvailable());
 
@@ -83,9 +92,9 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 		this.app.workspace.onLayoutReady(() => this.applyPdfOverride());
 	}
 
-	async onunload() {
-		await this.store.flush();
-		await this.decks.flush();
+	onunload() {
+		void this.store.flush();
+		void this.decks.flush();
 		this.restorePdf();
 	}
 
@@ -134,14 +143,13 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 	// ---------- Typed Graph pairing ----------
 
 	typedGraphEnabled(): boolean {
-		const plugins = (this.app as any).plugins;
-		return !!plugins?.enabledPlugins?.has?.(TYPED_GRAPH_ID);
+		return !!internals(this.app).plugins?.enabledPlugins?.has(TYPED_GRAPH_ID);
 	}
 
 	typedState(): TypedState {
 		const mode = this.settings.notes.typedNotes;
 		const on = mode === "on" || (mode === "auto" && this.typedGraphEnabled());
-		const tgFolder = (this.app as any).plugins?.plugins?.[TYPED_GRAPH_ID]?.settings?.schemaFolder;
+		const tgFolder = internals(this.app).plugins?.plugins?.[TYPED_GRAPH_ID]?.settings?.schemaFolder;
 		return { on, schemaFolder: this.settings.notes.schemaFolder || tgFolder || DEFAULT_SCHEMA_FOLDER };
 	}
 
@@ -156,7 +164,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 			new Notice("Install and turn on the Typed Graph plugin to see your reading as a graph.");
 			return false;
 		}
-		return !!(this.app as any).commands?.executeCommandById?.(TYPED_GRAPH_GRAPH_COMMAND);
+		return !!internals(this.app).commands?.executeCommandById(TYPED_GRAPH_GRAPH_COMMAND);
 	}
 
 	// ---------- ReaderHost ----------
@@ -166,7 +174,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 	}
 
 	loadPdf() {
-		return loadPdfJs();
+		return loadPdfJs() as Promise<PdfJs>;
 	}
 
 	openNote(path: string) {
@@ -214,7 +222,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 			leaf = Platform.isMobile ? this.app.workspace.getLeaf("tab") : this.app.workspace.getLeaf("split", "vertical");
 			await leaf.setViewState({ type: VIEW_TYPE_DECKS, active: true });
 		}
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
 		const v = leaf.view;
 		if (deckId && v instanceof DecksView) v.showDeck(deckId);
 	}
@@ -241,7 +249,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 			leaf = this.app.workspace.getLeaf(false);
 			await leaf.setViewState({ type: VIEW_TYPE_LIBRARY, active: true });
 		}
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
 	}
 
 	private activeReader(): ReaderView | null {
@@ -264,7 +272,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 
 	/** Optionally make this reader the default for PDFs (Obsidian has no public switch for this). */
 	applyPdfOverride() {
-		const registry = (this.app as any).viewRegistry;
+		const registry = internals(this.app).viewRegistry;
 		if (!registry) return;
 		try {
 			if (this.settings.reader.openPdfInReader && !this.pdfOverridden) {
@@ -282,10 +290,10 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 
 	private restorePdf() {
 		if (!this.pdfOverridden) return;
-		const registry = (this.app as any).viewRegistry;
+		const registry = internals(this.app).viewRegistry;
 		try {
-			registry.unregisterExtensions(["pdf"]);
-			registry.registerExtensions(["pdf"], "pdf");
+			registry?.unregisterExtensions(["pdf"]);
+			registry?.registerExtensions(["pdf"], "pdf");
 		} catch (e) { console.warn(e); }
 		this.pdfOverridden = false;
 	}
@@ -294,9 +302,9 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 		try {
 			const a = await this.ai.chat("You are a helpful assistant.", [{ role: "user", content: "Reply with the single word: ready" }]);
 			new Notice(`AI helper works: "${a.slice(0, 60)}"`);
-		} catch (e: any) {
+		} catch (e) {
 			if (e instanceof HandoffNeeded) { new Notice(`${e.reason} Questions will open in your chat app.`, 8000); return; }
-			new Notice(e?.message ?? String(e), 8000);
+			new Notice(e instanceof Error ? e.message : String(e), 8000);
 		}
 	}
 

@@ -13,9 +13,16 @@ export interface HttpRequest {
 	body: string;
 }
 
+/** The few fields of the AI services' JSON replies that we read. */
+export interface ApiJson {
+	error?: { message?: string };
+	content?: { type?: string; text?: string }[];
+	choices?: { message?: { content?: string } }[];
+}
+
 export interface HttpResponse {
 	status: number;
-	json: any;
+	json: ApiJson | null;
 	text: string;
 }
 
@@ -105,8 +112,8 @@ export class AiClient {
 			}
 			try {
 				return await this.cli(s, system, messages);
-			} catch (e: any) {
-				throw new AiError(e?.message ?? String(e));
+			} catch (e) {
+				throw new AiError(e instanceof Error ? e.message : String(e));
 			}
 		}
 		if (!this.isConfigured()) {
@@ -116,9 +123,10 @@ export class AiClient {
 		let res: HttpResponse;
 		try {
 			res = await this.request(req);
-		} catch (e: any) {
+		} catch (e) {
 			// requestUrl throws on non-2xx; try to keep the service's own message.
-			const msg = e?.json?.error?.message ?? e?.message ?? String(e);
+			const err = e as { json?: ApiJson; message?: string };
+			const msg = err.json?.error?.message ?? err.message ?? String(e);
 			throw new AiError(`Couldn't reach the AI service: ${msg}`);
 		}
 		if (res.status >= 400) {
@@ -130,11 +138,11 @@ export class AiClient {
 		return text.trim();
 	}
 
-	static extractText(provider: string, json: any): string {
+	static extractText(provider: string, json: ApiJson | null): string {
 		if (!json) return "";
 		if (provider === "anthropic") {
 			const parts = Array.isArray(json.content) ? json.content : [];
-			return parts.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n");
+			return parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n");
 		}
 		return json.choices?.[0]?.message?.content ?? "";
 	}

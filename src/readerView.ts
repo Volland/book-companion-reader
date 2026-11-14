@@ -1,4 +1,4 @@
-import { FileView, MarkdownRenderer, Menu, Notice, Platform, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { FileView, MarkdownRenderer, Menu, Notice, Platform, TFile, ViewStateResult, WorkspaceLeaf, setIcon } from "obsidian";
 import { CHAT_APPS, ChatMessage, HandoffNeeded } from "./ai";
 import { EpubBook, parseEpub } from "./epub";
 import { EpubRenderer } from "./epubRenderer";
@@ -8,7 +8,7 @@ import { Card, Deck, DeckStore, cardAnswer, sentenceAround } from "./decks";
 import { HandwritingModal, NoteModal, TextPromptModal, TocModal, buildInkToolbar } from "./modals";
 import { languageName, languageProfiles, profileFor } from "./languages";
 import type { BookNotes } from "./notes";
-import { PdfRenderer, PageSlot } from "./pdfRenderer";
+import { PdfRenderer, PageSlot, PdfJs } from "./pdfRenderer";
 import { ACTION_LABELS, AiAction, buildSystemPrompt, buildUserPrompt, parseCard, parseVocabulary } from "./prompts";
 import type { BookCompanionSettings, LearnerSettings } from "./settings";
 import { HIGHLIGHT_COLORS } from "./settings";
@@ -24,10 +24,10 @@ export interface ReaderHost {
 	decks: DeckStore;
 	notes: BookNotes;
 	askAi(system: string, messages: ChatMessage[]): Promise<string>;
-	loadPdf(): Promise<any>;
+	loadPdf(): Promise<PdfJs>;
 	openNote(path: string): void;
 	/** Open the flashcard decks (optionally one deck), or a quick study window. */
-	openDecks?(deckId?: string): void;
+	openDecks?(deckId?: string): void | Promise<void>;
 	studyDue?(deckIds?: string[], title?: string): void;
 	listBookNotes(meta: BookMeta): { path: string; name: string }[];
 	/** Typed Graph pairing (optional). */
@@ -70,12 +70,12 @@ export class ReaderView extends FileView {
 	panelTab: PanelTab = "ai";
 	panelOpen = false;
 	private selected: Selected | null = null;
-	private selTimer: any = null;
+	private selTimer: number | null = null;
 	private inkMode = false;
 	private inkState: { tool: InkTool };
 	private surfaces = new Map<number, InkSurface>();
 	private lastSurface: InkSurface | null = null;
-	private progressTimer: any = null;
+	private progressTimer: number | null = null;
 	private aiThreads = new Map<string, ChatMessage[]>();
 	private swipe: { x: number; y: number; t: number } | null = null;
 
@@ -89,21 +89,21 @@ export class ReaderView extends FileView {
 	getDisplayText() { return this.meta?.title ?? this.file?.basename ?? "Book"; }
 	canAcceptExtension(ext: string) { return formatOf(ext) !== null; }
 
-	getState(): any {
-		const s: any = super.getState();
+	getState(): Record<string, unknown> {
+		const s = super.getState();
 		const loc = this.currentLoc();
 		if (loc) s.loc = locToString(loc);
 		return s;
 	}
 
-	async setState(state: any, result: any) {
+	async setState(state: { loc?: string } | null, result: ViewStateResult) {
 		if (state?.loc) this.pendingLoc = locFromString(state.loc);
 		await super.setState(state, result);
 		if (state?.loc && (this.pdf || this.epub)) this.goto(locFromString(state.loc));
 	}
 
-	setEphemeralState(state: any) {
-		super.setEphemeralState?.(state);
+	setEphemeralState(state: { loc?: string | Loc } | null) {
+		super.setEphemeralState(state);
 		const loc = typeof state?.loc === "string" ? locFromString(state.loc) : state?.loc;
 		if (!loc) return;
 		if (this.pdf || this.epub) this.goto(loc);
@@ -142,7 +142,7 @@ export class ReaderView extends FileView {
 			if (e.pointerType === "touch") this.swipe = { x: e.clientX, y: e.clientY, t: Date.now() };
 		});
 		this.registerDomEvent(this.stageEl, "pointerup", (e: PointerEvent) => this.onSwipeEnd(e));
-		this.registerDomEvent(this.stageEl, "scroll", () => this.hideSelectionTool(), { capture: true } as any);
+		this.registerDomEvent(this.stageEl, "scroll", () => this.hideSelectionTool(), { capture: true });
 	}
 
 	private iconButton(parent: HTMLElement, icon: string, label: string, onClick: (e: MouseEvent) => void, cls = ""): HTMLElement {
@@ -227,15 +227,15 @@ export class ReaderView extends FileView {
 			const data = await this.app.vault.readBinary(file);
 			if (format === "pdf") await this.openPdf(data);
 			else await this.openEpub(data);
-		} catch (e: any) {
+		} catch (e) {
 			console.error(e);
 			this.stageEl.empty();
-			this.stageEl.createDiv({ cls: "bcr-error", text: `Couldn't open this book: ${e?.message ?? e}` });
+			this.stageEl.createDiv({ cls: "bcr-error", text: `Couldn't open this book: ${e instanceof Error ? e.message : String(e)}` });
 			return;
 		}
 		this.renderPanel();
 		this.host.store.saveSoon();
-		(this.leaf as any).updateHeader?.();
+		(this.leaf as unknown as { updateHeader?(): void }).updateHeader?.();
 	}
 
 	/** Open a book straight from its bytes (used by the preview and self-test). */
@@ -279,7 +279,7 @@ export class ReaderView extends FileView {
 		if (!this.book || !this.meta) return;
 		if (title) { this.book.title = title; this.meta.title = title; }
 		if (author) { this.book.author = author; this.meta.author = author; }
-		(this.leaf as any).updateHeader?.();
+		(this.leaf as unknown as { updateHeader?(): void }).updateHeader?.();
 	}
 
 	async onUnloadFile(_file: TFile) {
@@ -326,10 +326,10 @@ export class ReaderView extends FileView {
 		this.book.loc = loc;
 		this.book.progress = progress;
 		this.setLocLabel(label);
-		if (this.progressEl) this.progressEl.style.width = `${Math.round(progress * 100)}%`;
+		if (this.progressEl) this.progressEl.setCssProps({ width: `${Math.round(progress * 100)}%` });
 		this.host.store.saveSoon(1500);
-		if (this.progressTimer) clearTimeout(this.progressTimer);
-		this.progressTimer = setTimeout(() => { if (this.meta) void this.host.notes.updateProgress(this.meta, progress).catch(() => {}); }, 8000);
+		if (this.progressTimer) window.clearTimeout(this.progressTimer);
+		this.progressTimer = window.setTimeout(() => { if (this.meta) void this.host.notes.updateProgress(this.meta, progress).catch(() => {}); }, 8000);
 	}
 
 	private saveLoc() {
@@ -350,7 +350,7 @@ export class ReaderView extends FileView {
 
 	private onStageClick(e: MouseEvent) {
 		const target = e.target as HTMLElement;
-		const mark = target.closest?.("mark.bcr-hl") as HTMLElement | null;
+		const mark = target.closest<HTMLElement>("mark.bcr-hl");
 		if (mark) { this.highlightMenu(mark, e); return; }
 		if (!this.epub || this.host.settings.reader.epubLayout !== "paged" || this.hasSelection()) return;
 		if (target.closest("a, button, img")) return;
@@ -398,10 +398,9 @@ export class ReaderView extends FileView {
 			const hk = h.loc.page != null ? `p${h.loc.page}` : `c${h.loc.chapter}`;
 			if (hk !== key) continue;
 			wrapText(root, h.text, (doc) => {
-				const m = doc.createElement("mark");
-				m.className = "bcr-hl";
+				const m = createEl("mark", { cls: "bcr-hl" });
 				m.dataset.id = h.id;
-				m.style.setProperty("--bcr-hl", HIGHLIGHT_COLORS[h.color] ?? h.color);
+				m.setCssProps({ "--bcr-hl": HIGHLIGHT_COLORS[h.color] ?? h.color });
 				return m;
 			});
 		}
@@ -478,7 +477,7 @@ export class ReaderView extends FileView {
 		const colors = t.createDiv({ cls: "bcr-sel-colors" });
 		for (const [name, hex] of Object.entries(HIGHLIGHT_COLORS)) {
 			const sw = colors.createEl("button", { cls: "bcr-swatch", attr: { "aria-label": `Highlight ${name}` } });
-			sw.style.background = hex;
+			sw.setCssProps({ background: hex });
 			sw.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); this.withSel((s) => this.addHighlight(s, name)); });
 		}
 		btn("sticky-note", "Note", () => this.withSel((s) => this.writeNote(s)));
@@ -493,8 +492,8 @@ export class ReaderView extends FileView {
 	}
 
 	private queueSelectionCheck(ms = 220) {
-		if (this.selTimer) clearTimeout(this.selTimer);
-		this.selTimer = setTimeout(() => this.checkSelection(), ms);
+		if (this.selTimer) window.clearTimeout(this.selTimer);
+		this.selTimer = window.setTimeout(() => this.checkSelection(), ms);
 	}
 
 	private checkSelection() {
@@ -512,20 +511,20 @@ export class ReaderView extends FileView {
 	}
 
 	private locForElement(el: HTMLElement): Loc {
-		const page = el.closest(".bcr-page") as HTMLElement | null;
+		const page = el.closest<HTMLElement>(".bcr-page");
 		if (page) return { page: parseInt(page.dataset.page ?? "1", 10) };
 		return this.epub ? this.epub.getLoc() : (this.currentLoc() ?? {});
 	}
 
 	private contextFor(el: HTMLElement, text: string): string {
 		if (this.pdf) {
-			const page = el.closest(".bcr-page") as HTMLElement | null;
+			const page = el.closest<HTMLElement>(".bcr-page");
 			const tl = page?.querySelector(".bcr-textLayer");
 			const full = (tl?.textContent ?? "").replace(/\s+/g, " ");
 			const at = full.indexOf(text.slice(0, 30));
 			return at >= 0 ? full.slice(Math.max(0, at - 900), at + text.length + 900) : full.slice(0, 2000);
 		}
-		const block = el.closest("p, li, blockquote, dd, td, h1, h2, h3, h4, div") as HTMLElement | null;
+		const block = el.closest<HTMLElement>("p, li, blockquote, dd, td, h1, h2, h3, h4, div");
 		const parts: string[] = [];
 		if (block?.previousElementSibling?.textContent) parts.push(block.previousElementSibling.textContent);
 		if (block?.textContent) parts.push(block.textContent);
@@ -545,8 +544,7 @@ export class ReaderView extends FileView {
 		let top = Platform.isMobile ? rect.bottom - body.top + 12 : rect.top - body.top - th - 10;
 		if (top < 4) top = rect.bottom - body.top + 10;
 		if (top + th > body.height - 4) top = Math.max(4, rect.top - body.top - th - 10);
-		t.style.left = `${left}px`;
-		t.style.top = `${top}px`;
+		t.setCssProps({ left: `${left}px`, top: `${top}px` });
 	}
 
 	hideSelectionTool() {
@@ -570,7 +568,7 @@ export class ReaderView extends FileView {
 				const r = doc.createRange();
 				r.setStart(n, i);
 				r.setEnd(n, i + text.length);
-				const s = doc.getSelection?.()!;
+				const s = doc.getSelection()!;
 				s.removeAllRanges();
 				s.addRange(r);
 				this.checkSelection();
@@ -693,12 +691,12 @@ export class ReaderView extends FileView {
 			card.answer = await this.host.askAi(this.bookSystem(), messages);
 			messages.push({ role: "assistant", content: card.answer });
 			this.aiThreads.set(card.id, messages);
-		} catch (e: any) {
+		} catch (e) {
 			if (e instanceof HandoffNeeded) {
 				card.handoff = e.prompt;
 				card.handoffReason = e.reason;
 			} else {
-				card.answer = e?.message ?? String(e);
+				card.answer = e instanceof Error ? e.message : String(e);
 				card.error = true;
 			}
 		}
@@ -735,12 +733,12 @@ export class ReaderView extends FileView {
 			const a = await this.host.askAi(this.bookSystem(), thread);
 			thread.push({ role: "assistant", content: a });
 			card.answer = card.answer.replace(/…$/, a);
-		} catch (e: any) {
+		} catch (e) {
 			if (e instanceof HandoffNeeded) {
 				card.answer = card.answer.replace(/\n\n---\n\*\*You:\*\*[\s\S]*…$/, "");
 				card.handoff = e.prompt;
 				card.handoffReason = e.reason;
-			} else card.answer = card.answer.replace(/…$/, `⚠️ ${e?.message ?? e}`);
+			} else card.answer = card.answer.replace(/…$/, `⚠️ ${e instanceof Error ? e.message : String(e)}`);
 		}
 		this.aiThreads.set(card.id, thread);
 		this.host.store.saveSoon();
@@ -821,7 +819,7 @@ export class ReaderView extends FileView {
 		this.panelOpen = force ?? !this.panelOpen;
 		this.rootEl.toggleClass("panel-open", this.panelOpen);
 		if (this.panelOpen) this.renderPanel();
-		setTimeout(() => { this.epub?.relayout(); }, 260);
+		window.setTimeout(() => { this.epub?.relayout(); }, 260);
 	}
 
 	openPanel(tab: PanelTab) {
@@ -902,11 +900,11 @@ export class ReaderView extends FileView {
 			void MarkdownRenderer.render(this.app, card.answer, ans, this.file?.path ?? "", this);
 			if (card.error) continue;
 			const actions = el.createDiv({ cls: "bcr-card-actions" });
-			const mkBtn = (icon: string, label: string, fn: () => void) => {
+			const mkBtn = (icon: string, label: string, fn: () => void | Promise<void>) => {
 				const b = actions.createEl("button", { cls: "bcr-chip" });
 				setIcon(b.createSpan(), icon);
 				b.createSpan({ text: label });
-				b.onclick = fn;
+				b.onclick = () => void fn();
 				return b;
 			};
 			mkBtn("file-plus", "Save as note", async () => {
@@ -993,7 +991,7 @@ export class ReaderView extends FileView {
 		const sorted = book.highlights.slice().sort((a, b) => (a.loc.page ?? a.loc.chapter ?? 0) - (b.loc.page ?? b.loc.chapter ?? 0) || (a.loc.frac ?? 0) - (b.loc.frac ?? 0));
 		for (const h of sorted) {
 			const row = body.createDiv({ cls: "bcr-hl-row" });
-			row.style.setProperty("--bcr-hl", HIGHLIGHT_COLORS[h.color] ?? h.color);
+			row.setCssProps({ "--bcr-hl": HIGHLIGHT_COLORS[h.color] ?? h.color });
 			const txt = row.createDiv({ cls: "bcr-hl-text", text: h.text.length > 220 ? h.text.slice(0, 220) + "…" : h.text });
 			txt.onclick = () => this.goto(h.loc);
 			const meta2 = row.createDiv({ cls: "bcr-hl-meta" });

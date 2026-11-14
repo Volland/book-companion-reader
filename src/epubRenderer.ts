@@ -34,22 +34,13 @@ export class EpubRenderer {
 	private lastH = 0;
 
 	constructor(private parent: HTMLElement, public book: EpubBook, private parser: DomParserLike, public opts: EpubViewOptions, private cb: RendererCallbacks) {
-		const doc = parent.ownerDocument;
-		this.viewport = doc.createElement("div");
-		this.viewport.className = "bcr-epub-viewport";
-		this.clip = doc.createElement("div");
-		this.clip.className = "bcr-epub-clip";
-		this.content = doc.createElement("div");
-		this.content.className = "bcr-epub-content bcr-selectable";
-		this.footer = doc.createElement("div");
-		this.footer.className = "bcr-epub-footer";
-		this.clip.appendChild(this.content);
-		this.viewport.appendChild(this.clip);
-		this.viewport.appendChild(this.footer);
-		parent.appendChild(this.viewport);
+		this.viewport = parent.createDiv({ cls: "bcr-epub-viewport" });
+		this.clip = this.viewport.createDiv({ cls: "bcr-epub-clip" });
+		this.content = this.clip.createDiv({ cls: "bcr-epub-content bcr-selectable" });
+		this.footer = this.viewport.createDiv({ cls: "bcr-epub-footer" });
 
 		this.content.addEventListener("click", (e) => {
-			const a = (e.target as HTMLElement).closest?.("a[data-bcr-chapter]") as HTMLElement | null;
+			const a = (e.target as HTMLElement).closest<HTMLElement>("a[data-bcr-chapter]");
 			if (!a) return;
 			e.preventDefault();
 			const idx = parseInt(a.getAttribute("data-bcr-chapter") ?? "-1", 10);
@@ -70,8 +61,7 @@ export class EpubRenderer {
 		this.viewport.toggleClass?.("is-scroll", opts.layout === "scroll");
 		this.viewport.classList.toggle("is-paged", opts.layout === "paged");
 		this.viewport.classList.toggle("is-scroll", opts.layout === "scroll");
-		this.content.style.fontSize = `${opts.fontSize}px`;
-		this.content.style.lineHeight = String(opts.lineHeight);
+		this.content.setCssProps({ "font-size": `${opts.fontSize}px`, "line-height": String(opts.lineHeight) });
 		this.content.dataset.font = opts.fontFamily;
 		this.lastW = 0;
 		this.relayout(frac);
@@ -100,7 +90,7 @@ export class EpubRenderer {
 		this.content.empty?.();
 		while (this.content.firstChild) this.content.removeChild(this.content.firstChild);
 		this.content.appendChild(frag);
-		for (const img of Array.from(this.content.querySelectorAll("img[data-bcr-src]")) as HTMLImageElement[]) {
+		for (const img of Array.from(this.content.querySelectorAll<HTMLImageElement>("img[data-bcr-src]"))) {
 			const url = this.resource(img.getAttribute("data-bcr-src")!);
 			if (url) img.src = url;
 			img.addEventListener("load", () => this.relayout());
@@ -113,12 +103,10 @@ export class EpubRenderer {
 		const isLast = index === this.book.chapters.length - 1;
 		this.footer.textContent = "";
 		if (this.opts.layout === "scroll") {
-			const btn = this.parent.ownerDocument.createElement("button");
-			btn.className = "bcr-next-chapter";
+			const btn = this.footer.createEl("button", { cls: "bcr-next-chapter" });
 			btn.textContent = isLast ? "The end" : `Next: ${this.book.chapters[index + 1].title} ›`;
 			btn.disabled = isLast;
 			btn.addEventListener("click", () => void this.showChapter(index + 1));
-			this.footer.appendChild(btn);
 		}
 		this.cb.onRendered(this.content, `c${index}`);
 		this.lastW = 0;
@@ -137,24 +125,13 @@ export class EpubRenderer {
 		if (this.opts.layout === "paged") {
 			this.colW = Math.max(200, Math.min(MAX_COLUMN, W - 40));
 			const innerH = Math.max(200, H - 56);
-			this.clip.style.width = `${this.colW}px`;
-			this.clip.style.height = `${innerH}px`;
-			this.content.style.width = `${this.colW}px`;
-			this.content.style.height = `${innerH}px`;
-			this.content.style.columnWidth = `${this.colW}px`;
-			this.content.style.columnGap = `${GAP}px`;
-			this.content.style.setProperty("--bcr-img-max-h", `${innerH - 20}px`);
+			this.clip.setCssProps({ width: `${this.colW}px`, height: `${innerH}px` });
+			this.content.setCssProps({ width: `${this.colW}px`, height: `${innerH}px`, "column-width": `${this.colW}px`, "column-gap": `${GAP}px`, "--bcr-img-max-h": `${innerH - 20}px` });
 			this.pages = Math.max(1, Math.round((this.content.scrollWidth + GAP) / (this.colW + GAP)));
 			this.setPage(Math.min(this.pages - 1, Math.round(frac * this.pages)));
 		} else {
-			this.clip.style.width = "";
-			this.clip.style.height = "";
-			this.content.style.width = "";
-			this.content.style.height = "";
-			this.content.style.columnWidth = "";
-			this.content.style.columnGap = "";
-			this.content.style.transform = "";
-			this.content.style.removeProperty("--bcr-img-max-h");
+			this.clip.setCssProps({ width: "", height: "" });
+			this.content.setCssProps({ width: "", height: "", "column-width": "", "column-gap": "", transform: "", "--bcr-img-max-h": "" });
 			const max = this.viewport.scrollHeight - this.viewport.clientHeight;
 			this.viewport.scrollTop = frac * Math.max(0, max);
 		}
@@ -162,13 +139,13 @@ export class EpubRenderer {
 
 	private setPage(p: number) {
 		this.page = Math.max(0, Math.min(this.pages - 1, p));
-		this.content.style.transform = `translateX(${-this.page * (this.colW + GAP)}px)`;
+		this.content.setCssProps({ transform: `translateX(${-this.page * (this.colW + GAP)}px)` });
 		this.footer.textContent = this.pages > 1 ? `${this.book.chapters[this.chapter].title} · ${this.page + 1} / ${this.pages}` : this.book.chapters[this.chapter].title;
 		this.report();
 	}
 
 	private goToFragment(id: string) {
-		const el = this.content.querySelector(`[id="${CSS?.escape ? CSS.escape(id) : id}"]`) as HTMLElement | null;
+		const el = this.content.querySelector<HTMLElement>(`[id="${CSS?.escape ? CSS.escape(id) : id}"]`);
 		if (!el) return;
 		if (this.opts.layout === "paged") {
 			const base = this.content.getBoundingClientRect();
@@ -222,7 +199,7 @@ export class EpubRenderer {
 	/** The text the reader can see right now (for "Study this page"). */
 	visibleText(): string {
 		const vr = this.clip.getBoundingClientRect();
-		const blocks = Array.from(this.content.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, dd, dt, td")) as HTMLElement[];
+		const blocks = Array.from(this.content.querySelectorAll<HTMLElement>("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, dd, dt, td"));
 		const out: string[] = [];
 		for (const b of blocks) {
 			if (b.querySelector("p, li, blockquote")) continue;

@@ -1,5 +1,33 @@
 import type { Loc } from "./types";
 
+/** The parts of pdf.js that we use (Obsidian hands it to us untyped). */
+export interface PdfViewport { width: number; height: number }
+export interface PdfTextItem { str?: string; hasEOL?: boolean }
+export interface PdfRenderTask { promise: Promise<void>; cancel(): void }
+export interface PdfPage {
+	getViewport(o: { scale: number }): PdfViewport;
+	render(o: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport; transform?: number[] }): PdfRenderTask;
+	getTextContent(): Promise<{ items: PdfTextItem[] }>;
+}
+export interface PdfOutlineItem { title: string; dest?: string | unknown[] | null; items?: PdfOutlineItem[] }
+export interface PdfDoc {
+	numPages: number;
+	getPage(n: number): Promise<PdfPage>;
+	getMetadata(): Promise<{ info?: { Title?: string; Author?: string } }>;
+	getOutline(): Promise<PdfOutlineItem[] | null>;
+	getDestination(id: string): Promise<unknown[] | null>;
+	getPageIndex(ref: unknown): Promise<number>;
+	destroy(): unknown;
+}
+interface TextLayerOptions { textContentSource: unknown; container: HTMLElement; viewport: PdfViewport; textContent?: unknown; textDivs?: unknown[] }
+export interface PdfJs {
+	getDocument(o: { data: Uint8Array }): { promise: Promise<PdfDoc> };
+	TextLayer?: new (o: TextLayerOptions) => { render(): Promise<void> };
+	renderTextLayer?(o: TextLayerOptions): { promise: Promise<void> };
+}
+
+const itemsText = (items: PdfTextItem[]) => items.map((i) => (i.str ?? "") + (i.hasEOL ? "\n" : " ")).join("");
+
 export interface PageSlot {
 	num: number;
 	el: HTMLElement;
@@ -9,7 +37,7 @@ export interface PageSlot {
 	rendering: boolean;
 	canvas?: HTMLCanvasElement;
 	textLayer?: HTMLElement;
-	task?: any;
+	task?: PdfRenderTask;
 }
 
 export interface PdfCallbacks {
@@ -21,7 +49,7 @@ export interface PdfCallbacks {
 const MAX_RENDERED = 10;
 
 export class PdfRenderer {
-	doc: any;
+	doc: PdfDoc | null = null;
 	numPages = 0;
 	viewport: HTMLElement;
 	private pagesEl: HTMLElement;
@@ -37,33 +65,24 @@ export class PdfRenderer {
 	private resizeObs: ResizeObserver | null = null;
 	private lastWidth = 0;
 
-	constructor(private parent: HTMLElement, private pdfjs: any, private cb: PdfCallbacks) {
-		const doc = parent.ownerDocument;
-		this.viewport = doc.createElement("div");
-		this.viewport.className = "bcr-pdf-viewport";
-		this.pagesEl = doc.createElement("div");
-		this.pagesEl.className = "bcr-pdf-pages";
-		this.viewport.appendChild(this.pagesEl);
-		parent.appendChild(this.viewport);
+	constructor(private parent: HTMLElement, private pdfjs: PdfJs, private cb: PdfCallbacks) {
+		this.viewport = parent.createDiv({ cls: "bcr-pdf-viewport" });
+		this.pagesEl = this.viewport.createDiv({ cls: "bcr-pdf-pages" });
 		this.viewport.addEventListener("scroll", () => this.trackCurrent());
 	}
 
 	async open(data: ArrayBuffer) {
-		this.doc = await this.pdfjs.getDocument({ data: new Uint8Array(data) }).promise;
-		this.numPages = this.doc.numPages;
-		const first = await this.doc.getPage(1);
+		const doc = await this.pdfjs.getDocument({ data: new Uint8Array(data) }).promise;
+		this.doc = doc;
+		this.numPages = doc.numPages;
+		const first = await doc.getPage(1);
 		const vp = first.getViewport({ scale: 1 });
 		this.baseWidth = vp.width;
 		this.baseHeight = vp.height;
 		for (let i = 1; i <= this.numPages; i++) {
-			const el = this.parent.ownerDocument.createElement("div");
-			el.className = "bcr-page";
+			const el = this.pagesEl.createDiv({ cls: "bcr-page" });
 			el.dataset.page = String(i);
-			const label = this.parent.ownerDocument.createElement("div");
-			label.className = "bcr-page-num bcr-skip-hl";
-			label.textContent = String(i);
-			el.appendChild(label);
-			this.pagesEl.appendChild(el);
+			el.createDiv({ cls: "bcr-page-num bcr-skip-hl", text: String(i) });
 			this.slots.push({ num: i, el, width: 0, height: 0, rendered: false, rendering: false });
 		}
 		this.layoutSizes();
@@ -90,7 +109,7 @@ export class PdfRenderer {
 
 	async metadata(): Promise<{ title?: string; author?: string }> {
 		try {
-			const m = await this.doc.getMetadata();
+			const m = await this.doc?.getMetadata();
 			return { title: m?.info?.Title || undefined, author: m?.info?.Author || undefined };
 		} catch {
 			return {};
@@ -111,8 +130,7 @@ export class PdfRenderer {
 			const sc = this.scaleFor(s.num);
 			s.width = Math.floor(w * sc);
 			s.height = Math.floor(h * sc);
-			s.el.style.width = `${s.width}px`;
-			s.el.style.height = `${s.height}px`;
+			s.el.setCssProps({ width: `${s.width}px`, height: `${s.height}px` });
 		}
 	}
 
@@ -135,35 +153,29 @@ export class PdfRenderer {
 				const sc0 = this.scaleFor(slot.num);
 				slot.width = Math.floor(base.width * sc0);
 				slot.height = Math.floor(base.height * sc0);
-				slot.el.style.width = `${slot.width}px`;
-				slot.el.style.height = `${slot.height}px`;
+				slot.el.setCssProps({ width: `${slot.width}px`, height: `${slot.height}px` });
 			}
 			const scale = this.scaleFor(slot.num);
 			const vp = page.getViewport({ scale });
-			let dpr = Math.min(2, (globalThis as any).devicePixelRatio || 1);
+			let dpr = Math.min(2, window.devicePixelRatio || 1);
 			// keep each canvas under ~12 megapixels (phones run out of memory otherwise)
 			while (vp.width * vp.height * dpr * dpr > 12e6 && dpr > 1) dpr -= 0.25;
-			const canvas = slot.el.ownerDocument.createElement("canvas");
-			canvas.className = "bcr-page-canvas";
+			const canvas = slot.el.createEl("canvas", { cls: "bcr-page-canvas" });
 			canvas.width = Math.floor(vp.width * dpr);
 			canvas.height = Math.floor(vp.height * dpr);
-			canvas.style.width = `${Math.floor(vp.width)}px`;
-			canvas.style.height = `${Math.floor(vp.height)}px`;
-			slot.el.style.setProperty("--scale-factor", String(scale));
-			slot.el.style.setProperty("--total-scale-factor", String(scale));
-			slot.el.style.setProperty("--user-unit", "1");
+			canvas.setCssProps({ width: `${Math.floor(vp.width)}px`, height: `${Math.floor(vp.height)}px` });
+			slot.el.setCssProps({ "--scale-factor": String(scale), "--total-scale-factor": String(scale), "--user-unit": "1" });
 			slot.el.prepend(canvas);
 			const ctx = canvas.getContext("2d")!;
-			slot.task = page.render({ canvasContext: ctx, viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined });
-			await slot.task.promise;
+			const task = page.render({ canvasContext: ctx, viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined });
+			slot.task = task;
+			await task.promise;
 			slot.canvas = canvas;
 
-			const tl = slot.el.ownerDocument.createElement("div");
-			tl.className = "textLayer bcr-textLayer bcr-selectable";
-			slot.el.appendChild(tl);
+			const tl = slot.el.createDiv({ cls: "textLayer bcr-textLayer bcr-selectable" });
 			slot.textLayer = tl;
 			const textContent = await page.getTextContent();
-			this.textCache.set(slot.num, textContent.items.map((i: any) => (i.str ?? "") + (i.hasEOL ? "\n" : " ")).join(""));
+			this.textCache.set(slot.num, itemsText(textContent.items));
 			try {
 				if (this.pdfjs.TextLayer) {
 					const layer = new this.pdfjs.TextLayer({ textContentSource: textContent, container: tl, viewport: vp });
@@ -178,8 +190,8 @@ export class PdfRenderer {
 			this.renderOrder.push(slot.num);
 			this.cb.onPageRendered(slot);
 			this.evict();
-		} catch (e: any) {
-			if (e?.name !== "RenderingCancelledException") console.warn("Book Companion: page render failed", e);
+		} catch (e) {
+			if ((e as { name?: string } | null)?.name !== "RenderingCancelledException") console.warn("Book Companion: page render failed", e);
 		} finally {
 			slot.rendering = false;
 		}
@@ -245,25 +257,27 @@ export class PdfRenderer {
 
 	async pageText(num: number): Promise<string> {
 		if (this.textCache.has(num)) return this.textCache.get(num)!;
+		if (!this.doc) return "";
 		const page = await this.doc.getPage(num);
 		const tc = await page.getTextContent();
-		const t = tc.items.map((i: any) => (i.str ?? "") + (i.hasEOL ? "\n" : " ")).join("");
+		const t = itemsText(tc.items);
 		this.textCache.set(num, t);
 		return t;
 	}
 
 	async outline(): Promise<{ title: string; page: number; depth: number }[]> {
 		const out: { title: string; page: number; depth: number }[] = [];
-		let items: any[] | null = null;
-		try { items = await this.doc.getOutline(); } catch { items = null; }
-		if (!items) return out;
-		const walk = async (list: any[], depth: number) => {
+		const doc = this.doc;
+		let items: PdfOutlineItem[] | null = null;
+		try { items = (await doc?.getOutline()) ?? null; } catch { items = null; }
+		if (!doc || !items) return out;
+		const walk = async (list: PdfOutlineItem[], depth: number) => {
 			for (const it of list) {
 				let page = 0;
 				try {
-					let dest = it.dest;
-					if (typeof dest === "string") dest = await this.doc.getDestination(dest);
-					if (Array.isArray(dest) && dest[0]) page = typeof dest[0] === "number" ? dest[0] + 1 : (await this.doc.getPageIndex(dest[0])) + 1;
+					let dest: unknown = it.dest;
+					if (typeof dest === "string") dest = await doc.getDestination(dest);
+					if (Array.isArray(dest) && dest[0]) page = typeof dest[0] === "number" ? dest[0] + 1 : (await doc.getPageIndex(dest[0])) + 1;
 				} catch { /* unresolved */ }
 				if (page) out.push({ title: it.title, page, depth });
 				if (it.items?.length) await walk(it.items, depth + 1);
