@@ -14,6 +14,7 @@ mock.installDomHelpers(window);
 
 import { AiClient, HandoffNeeded } from "../src/ai";
 import { buildCliCommand } from "../src/cliRunner";
+import { SHORTCUT_CALLBACK, ShortcutBridge } from "../src/shortcut";
 import { parseEpub } from "../src/epub";
 import { strokesToSvg, svgToStrokes, eraseAt } from "../src/ink";
 import { BookNotes, HUB_SECTIONS, insertUnderHeading, setFrontmatterField, today } from "../src/notes";
@@ -409,6 +410,32 @@ async function main() {
 	check("subscriptions", handoff.includes("Explain X") && desk === "desktop answer" && claudeCmd.bin === "claude" && claudeCmd.args.includes("-p") && codexCmd.answerFile === "/tmp/x" && !!hoCard?.handoff && hoButtons.some((t: string) => t.includes("Claude")) && hoButtons.some((t: string) => t.includes("Paste")),
 		`Claude subscription runs "claude -p" on a computer; on a phone the question goes to the chat app (${hoButtons.join(", ")})`);
 	settings.ai.provider = "claude-sub";
+
+	// --- iPhone/iPad: the question runs through an Apple Shortcut and the answer comes back by obsidian://
+	const opened: string[] = [];
+	let clip = "";
+	const bridge = new ShortcutBridge((u) => opened.push(u), () => "My Vault", async () => clip);
+	const iosClient = new AiClient(() => sAi, async () => ({ status: 200, json: {}, text: "" }), async () => "desktop answer", () => false, () => (pr) => bridge.run("Book Companion AI", pr));
+	const idOf = (u: string) => decodeURIComponent(/x-success=([^&]+)/.exec(u)?.[1] ?? "").match(/[?&]id=([^&]+)/)?.[1] ?? "";
+	const asked = iosClient.chat("sys", [{ role: "user", content: "Explain X & Y = 1?" }]);
+	const scUrl = opened[0] ?? "";
+	const scText = decodeURIComponent(/[?&]text=([^&]+)/.exec(scUrl)?.[1] ?? "");
+	const scBack = decodeURIComponent(/x-success=([^&]+)/.exec(scUrl)?.[1] ?? "");
+	const known = await bridge.handle({ action: SHORTCUT_CALLBACK, id: idOf(scUrl), result: "Claude app answer" });
+	const scAnswer = await asked;
+	const cancelled = iosClient.chat("sys", [{ role: "user", content: "Second" }]);
+	await bridge.handle({ id: idOf(opened[1] ?? ""), status: "cancel" });
+	let cancelHandoff = "";
+	try { await cancelled; } catch (e) { if (e instanceof HandoffNeeded) cancelHandoff = e.prompt; }
+	const viaClip = iosClient.chat("sys", [{ role: "user", content: "Third" }]);
+	clip = "copied answer";
+	await bridge.handle({ id: idOf(opened[2] ?? "") });
+	const clipAnswer = await viaClip;
+	const stale = await bridge.handle({ id: "nope", result: "x" });
+	check("ios-shortcut", scUrl.startsWith("shortcuts://x-callback-url/run-shortcut?name=Book%20Companion%20AI&input=text") && scText.includes("Explain X & Y = 1?")
+		&& scBack.startsWith(`obsidian://${SHORTCUT_CALLBACK}?vault=My%20Vault&id=`) && known && scAnswer === "Claude app answer"
+		&& cancelHandoff.includes("Second") && clipAnswer === "copied answer" && !stale && bridge.waiting === 0,
+		`on iPhone/iPad the question opens the "Book Companion AI" Shortcut and its answer returns through obsidian://${SHORTCUT_CALLBACK}; cancel falls back to the chat app; a copied answer also works`);
 
 	// --- small pure pieces
 	const api = new AiClient(() => ({ ...DEFAULT_SETTINGS.ai, provider: "anthropic", apiKey: "k", model: "claude-haiku-5-5", baseUrl: "https://api.anthropic.com/v1" }), async () => ({ status: 200, json: { content: [{ type: "text", text: "hi" }] }, text: "" }));

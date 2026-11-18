@@ -16,6 +16,10 @@ export interface AiSettings {
 	cliPath: string;
 	/** Which chat app gets the question on phones (or with the "chat app" option). */
 	chatApp: "chatgpt" | "claude" | "gemini";
+	/** iPhone/iPad: ask through an Apple Shortcut ("Ask Claude" or "Use Model" → ChatGPT) and get the answer back by itself. */
+	iosShortcut: boolean;
+	/** Name of that Shortcut in the Shortcuts app. */
+	shortcutName: string;
 }
 
 export interface LearnerSettings {
@@ -79,10 +83,10 @@ export interface BookCompanionSettings {
 }
 
 export const PROVIDER_DEFAULTS: Record<Provider, { baseUrl: string; model: string; needsKey: boolean; label: string; kind: "api" | "cli" | "handoff"; help?: string }> = {
-	"claude-sub": { kind: "cli", baseUrl: "", model: "", needsKey: false, label: "My Claude subscription (Pro / Max)", help: "Uses the Claude Code app on this computer, signed in with your Claude account (run \"claude\" once in a terminal to sign in). On phones, questions go to your chat app instead." },
-	"chatgpt-sub": { kind: "cli", baseUrl: "", model: "", needsKey: false, label: "My ChatGPT subscription (Plus / Pro)", help: "Uses the Codex app on this computer, signed in with your ChatGPT account (run \"codex\" once in a terminal to sign in). On phones, questions go to your chat app instead." },
-	"gemini-sub": { kind: "cli", baseUrl: "", model: "", needsKey: false, label: "My Google account (Gemini)", help: "Uses the Gemini CLI on this computer, signed in with your Google account. On phones, questions go to your chat app instead." },
-	"chat-app": { kind: "handoff", baseUrl: "", model: "", needsKey: false, label: "My chat app, any device (paste the answer back)", help: "Opens ChatGPT, Claude or Gemini with your question ready; paste the answer back into the reader. Works on phones with any subscription." },
+	"claude-sub": { kind: "cli", baseUrl: "", model: "", needsKey: false, label: "My Claude subscription (Pro / Max)", help: "Uses the Claude Code app on this computer, signed in with your Claude account (run \"claude\" once in a terminal to sign in). On iPhone and iPad, questions go through your Shortcut (see below); on other phones, to your chat app." },
+	"chatgpt-sub": { kind: "cli", baseUrl: "", model: "", needsKey: false, label: "My ChatGPT subscription (Plus / Pro)", help: "Uses the Codex app on this computer, signed in with your ChatGPT account (run \"codex\" once in a terminal to sign in). On iPhone and iPad, questions go through your Shortcut (see below); on other phones, to your chat app." },
+	"gemini-sub": { kind: "cli", baseUrl: "", model: "", needsKey: false, label: "My Google account (Gemini)", help: "Uses the Gemini CLI on this computer. Since mid-2026 Google only lets work accounts (Gemini Code Assist Standard or Enterprise) sign in to it; with a personal Google AI Pro plan, choose \"My chat app\" or a free Gemini API key with \"Other OpenAI-compatible service\"." },
+	"chat-app": { kind: "handoff", baseUrl: "", model: "", needsKey: false, label: "My chat app, any device (paste the answer back)", help: "Opens ChatGPT, Claude or Gemini with your question ready; paste the answer back into the reader. Works on phones with any subscription. On iPhone and iPad, a Shortcut can bring the answer back by itself (see below)." },
 	anthropic: { kind: "api", baseUrl: "https://api.anthropic.com/v1", model: "claude-haiku-5-5", needsKey: true, label: "Anthropic API key" },
 	openai: { kind: "api", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", needsKey: true, label: "OpenAI API key" },
 	openrouter: { kind: "api", baseUrl: "https://openrouter.ai/api/v1", model: "anthropic/claude-haiku-5-5", needsKey: true, label: "OpenRouter API key" },
@@ -108,6 +112,8 @@ export const DEFAULT_SETTINGS: BookCompanionSettings = {
 		maxTokens: 1200,
 		cliPath: "",
 		chatApp: "claude",
+		iosShortcut: false,
+		shortcutName: "Book Companion AI",
 	},
 	learner: {
 		nativeLanguage: "Ukrainian",
@@ -164,6 +170,28 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 		super(app, plugin);
 	}
 
+	/** iPhone/iPad: answers come back from an Apple Shortcut that uses the person's Claude or ChatGPT app. */
+	private shortcutSettings(containerEl: HTMLElement) {
+		const s = this.plugin.settings;
+		const save = () => this.plugin.saveSettings();
+		new Setting(containerEl)
+			.setName("Use a Shortcut on iPhone and iPad")
+			.setDesc("Questions run through an Apple Shortcut that asks your Claude or ChatGPT app, and the answer comes back to the reader by itself. No API key: your subscription is used. If the Shortcut fails, the chat app buttons appear as before.")
+			.addToggle((t) => t.setValue(s.ai.iosShortcut).onChange(async (v) => { s.ai.iosShortcut = v; await save(); this.display(); }));
+		if (!s.ai.iosShortcut) return;
+		new Setting(containerEl)
+			.setName("Shortcut name")
+			.setDesc("Exactly as it's called in the Shortcuts app.")
+			.addText((t) => t.setPlaceholder("Book Companion AI").setValue(s.ai.shortcutName).onChange(async (v) => { s.ai.shortcutName = v.trim(); await save(); }));
+		const steps = containerEl.createDiv({ cls: "setting-item-description bcr-shortcut-steps" });
+		steps.createEl("p", { text: "Make the Shortcut once in the Shortcuts app on your iPhone or iPad:" });
+		const ol = steps.createEl("ol");
+		ol.createEl("li", { text: "New Shortcut, named as above. In its details, turn on \"Receive input\" for Text (from \"Nowhere\" is fine)." });
+		ol.createEl("li", { text: "Claude: add \"Ask Claude\" (from the Claude app) with Shortcut Input as the prompt. ChatGPT: add \"Use Model\" (iOS 26), pick ChatGPT, with Shortcut Input as the request." });
+		ol.createEl("li", { text: "Add \"Stop and Output\" with the AI's response. If no answer comes back, also add \"Copy to Clipboard\" before it." });
+		ol.createEl("li", { text: "Press Test below on your iPhone or iPad. The Shortcuts app opens, runs, and returns to Obsidian." });
+	}
+
 	display(): void {
 		const { containerEl } = this;
 		const s = this.plugin.settings;
@@ -201,6 +229,7 @@ export class BookCompanionSettingTab extends PluginSettingTab {
 			.setDesc("Where questions go when your subscription can't be reached from this device.")
 			.addDropdown((d) => d.addOption("claude", "Claude").addOption("chatgpt", "ChatGPT").addOption("gemini", "Gemini")
 				.setValue(s.ai.chatApp).onChange(async (v) => { s.ai.chatApp = v as typeof s.ai.chatApp; await save(); }));
+		if (pd.kind !== "api") this.shortcutSettings(containerEl);
 		if (pd.kind === "api") {
 		new Setting(containerEl)
 			.setName("API key")

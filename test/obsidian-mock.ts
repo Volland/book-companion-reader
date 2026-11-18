@@ -36,7 +36,7 @@ export function installDomHelpers(win: any) {
 const g: any = globalThis as any;
 if (g.HTMLElement) installDomHelpers(g);
 
-export const Platform = { isMobile: false, isPhone: false, isDesktopApp: false, isDesktop: true };
+export const Platform = { isMobile: false, isPhone: false, isDesktopApp: false, isDesktop: true, isIosApp: false, isAndroidApp: false };
 
 export class TAbstractFile { path = ""; name = ""; parent: TFolder | null = null; }
 export class TFile extends TAbstractFile {

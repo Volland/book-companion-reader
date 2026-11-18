@@ -55,8 +55,23 @@ export const CHAT_APPS: Record<string, { label: string; url: (q: string) => stri
 	gemini: { label: "Gemini", url: () => "https://gemini.google.com/app", prefill: false },
 };
 
+/** Asks through an Apple Shortcut on iPhone/iPad (see shortcut.ts); null when that isn't set up on this device. */
+export type ShortcutRunner = () => ((prompt: string) => Promise<string>) | null;
+
 export class AiClient {
-	constructor(private settings: () => AiSettings, private request: Requester, private cli?: CliRunner, private canRunCli: () => boolean = () => false) {}
+	constructor(private settings: () => AiSettings, private request: Requester, private cli?: CliRunner, private canRunCli: () => boolean = () => false, private shortcut: ShortcutRunner = () => null) {}
+
+	/** On iPhone/iPad with a Shortcut set up, questions that would go to the chat app run through it and come back by themselves. */
+	private async viaShortcutOr(prompt: string, reason: string): Promise<string> {
+		const run = this.shortcut();
+		if (!run) throw new HandoffNeeded(prompt, reason);
+		try {
+			return await run(prompt);
+		} catch (e) {
+			if (e instanceof HandoffNeeded) throw e;
+			throw new HandoffNeeded(prompt, e instanceof Error ? e.message : String(e));
+		}
+	}
 
 	isConfigured(): boolean {
 		const s = this.settings();
@@ -105,10 +120,10 @@ export class AiClient {
 	async chat(system: string, messages: ChatMessage[]): Promise<string> {
 		const s = this.settings();
 		const kind = PROVIDER_DEFAULTS[s.provider].kind;
-		if (kind === "handoff") throw new HandoffNeeded(plainPrompt(system, messages), "Answer in your chat app");
+		if (kind === "handoff") return this.viaShortcutOr(plainPrompt(system, messages), "Answer in your chat app");
 		if (kind === "cli") {
 			if (!this.cli || !this.canRunCli()) {
-				throw new HandoffNeeded(plainPrompt(system, messages), `${PROVIDER_DEFAULTS[s.provider].label} works through an app on a computer. On this device, send the question to your chat app.`);
+				return this.viaShortcutOr(plainPrompt(system, messages), `${PROVIDER_DEFAULTS[s.provider].label} works through an app on a computer. On this device, send the question to your chat app.`);
 			}
 			try {
 				return await this.cli(s, system, messages);

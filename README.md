@@ -115,12 +115,26 @@ Pick it in **Settings → Book Companion Reader → AI service**.
 |---|---|---|
 | **My Claude subscription** (default) | computer | [Claude Code](https://claude.com/claude-code) installed; run `claude` once to sign in with your Claude Pro/Max account |
 | **My ChatGPT subscription** | computer | [Codex CLI](https://github.com/openai/codex); run `codex` once to sign in with ChatGPT Plus/Pro |
-| **My Google account (Gemini)** | computer | [Gemini CLI](https://github.com/google-gemini/gemini-cli), signed in (whether it works depends on your Google plan) |
+| **My Google account (Gemini)** | computer | [Gemini CLI](https://github.com/google-gemini/gemini-cli), signed in. Since mid-2026 Google allows this only for work plans (Gemini Code Assist Standard/Enterprise); with a personal plan, use the chat app or a free Gemini API key |
 | **My chat app** | any device | nothing: the question opens in the Claude, ChatGPT or Gemini app, and you paste the answer back |
+| **Shortcut** (iPhone & iPad) | iPhone, iPad | a one-time Apple Shortcut using the Claude app's *Ask Claude* or iOS 26's *Use Model → ChatGPT*; answers come back by themselves (see below) |
 | Anthropic / OpenAI / OpenRouter | any device | an API key |
 | Ollama / OpenAI-compatible | computer or your network | a running local server |
 
 On a phone, the subscription options switch to **chat-app hand-off** automatically: tap *Ask Claude*, *Ask ChatGPT* or *Ask Gemini*, then *Paste answer*.
+
+### iPhone and iPad: answers through a Shortcut
+
+On iOS and iPadOS the reader can skip the copy and paste. It sends the question to an Apple Shortcut, the Shortcut asks your Claude or ChatGPT app, which uses your own subscription, and the answer comes back into the reader by itself.
+
+1. In the Shortcuts app, make a new Shortcut called **Book Companion AI**. In its details, turn on *Receive input* for **Text**.
+2. Add the AI step:
+   - **Claude:** add **Ask Claude** (from the Claude app) with *Shortcut Input* as the prompt.
+   - **ChatGPT:** add **Use Model** (iOS 26), choose **ChatGPT**, with *Shortcut Input* as the request.
+3. Add **Stop and Output** with the AI's response.
+4. In **Settings → Book Companion Reader**, turn on **Use a Shortcut on iPhone and iPad**, then press **Test** on the phone.
+
+This applies to the subscription options and to *My chat app*. If the Shortcut is missing, cancelled or fails, the usual *Ask Claude / ChatGPT / Gemini* buttons appear instead. Gemini's app can't return answers to Shortcuts yet, so it stays copy and paste.
 
 ## 🔗 Install it together with Typed Graph (recommended)
 
@@ -168,7 +182,7 @@ These notes are checked against Typed Graph's own engine: the test vault reads b
 
 ## Disclosures
 
-- **Network**: text is sent only when you press an AI button, and only to the service you chose in settings: the selection, a little surrounding text, and your language and level settings. With the subscription options, it goes through that app on your computer. With *My chat app*, it opens in that app's website or app.
+- **Network**: text is sent only when you press an AI button, and only to the service you chose in settings: the selection, a little surrounding text, and your language and level settings. With the subscription options, it goes through that app on your computer. With *My chat app*, it opens in that app's website or app. With the iPhone/iPad Shortcut option, it goes to the Shortcuts app and the AI app your Shortcut uses, and the answer comes back through an `obsidian://book-reader-answer` link.
 - **Accounts and payments**: the plugin is free. AI features need an account with an AI service you choose (or a local model), and that service's own terms and prices apply.
 - **Local programs (desktop only)**: the subscription options start the Claude Code, Codex or Gemini command line on your computer to ask your question. Nothing else is run.
 - **Your files**: the plugin writes only inside its books folder (default `Books/`) and, with typed notes on, two schema notes in your Typed Graph schema folder. Reading positions, highlights and page handwriting are kept in the plugin's own data. API keys are stored in plain text in the plugin's settings in your vault.

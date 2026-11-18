@@ -3,6 +3,7 @@ import { LOGO_ICON_ID, LOGO_ICON_SVG } from "./logo";
 import { DEFAULT_SCHEMA_FOLDER, TYPED_GRAPH_GRAPH_COMMAND, TYPED_GRAPH_ID, TypedState } from "./typed";
 import { AiClient, ApiJson, CHAT_APPS, ChatMessage, HandoffNeeded } from "./ai";
 import { desktopCliAvailable, runCli } from "./cliRunner";
+import { SHORTCUT_CALLBACK, ShortcutBridge } from "./shortcut";
 import { svgToStrokes } from "./ink";
 import { DeckStore } from "./decks";
 import { DecksView, StudyModal, VIEW_TYPE_DECKS } from "./decksView";
@@ -34,6 +35,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 	private shelfListeners = new Set<() => void>();
 	notes!: BookNotes;
 	ai!: AiClient;
+	shortcuts!: ShortcutBridge;
 	private pdfOverridden = false;
 
 	async onload() {
@@ -53,7 +55,13 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 			let json: ApiJson | null;
 			try { json = r.json as ApiJson; } catch { json = null; }
 			return { status: r.status, json, text: r.text };
-		}, runCli, () => Platform.isDesktopApp && desktopCliAvailable());
+		}, runCli, () => Platform.isDesktopApp && desktopCliAvailable(), () => this.shortcutRunner());
+		this.shortcuts = new ShortcutBridge((url) => window.open(url), () => this.app.vault.getName(), async () => (await navigator.clipboard?.readText()) ?? "");
+		this.registerObsidianProtocolHandler(SHORTCUT_CALLBACK, (params) => {
+			void this.shortcuts.handle(params).then((known) => {
+				if (!known) new Notice("That Shortcut answer arrived too late; the question was already sent to your chat app.");
+			});
+		});
 
 		this.registerView(VIEW_TYPE_READER, (leaf) => {
 			const v = new ReaderView(leaf, this);
@@ -112,6 +120,7 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 	}
 
 	onunload() {
+		this.shortcuts?.cancelAll();
 		void this.store.flush();
 		void this.decks.flush();
 		void this.suggestions.flush();
@@ -444,6 +453,16 @@ export default class BookCompanionPlugin extends Plugin implements ReaderHost {
 			registry?.registerExtensions(["pdf"], "pdf");
 		} catch (e) { console.warn(e); }
 		this.pdfOverridden = false;
+	}
+
+	/** iPhone/iPad with the Shortcut option on: a function that asks through it, showing that we're waiting. */
+	private shortcutRunner(): ((prompt: string) => Promise<string>) | null {
+		const ai = this.settings.ai;
+		if (!Platform.isIosApp || !ai.iosShortcut || !ai.shortcutName) return null;
+		return async (prompt) => {
+			const notice = new Notice(`Asking through the Shortcut "${ai.shortcutName}"…`, 0);
+			try { return await this.shortcuts.run(ai.shortcutName, prompt); } finally { notice.hide(); }
+		};
 	}
 
 	async testAi() {
